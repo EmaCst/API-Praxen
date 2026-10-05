@@ -17,6 +17,20 @@ const sequelize = new Sequelize(dbConfig.URL, {
 const db = {};
 db.Sequelize = Sequelize;
 db.sequelize = sequelize;
+db.atletas = require("./atleta.model.js")(sequelize, Sequelize.DataTypes);
 db.sesiones = require("./sesion.model.js")(sequelize, Sequelize.DataTypes);
+
+db.atletas.hasMany(db.sesiones, {
+  foreignKey: "athleteId",
+  as: "sesiones",
+  onUpdate: "CASCADE",
+  onDelete: "RESTRICT",
+});
+db.sesiones.belongsTo(db.atletas, {
+  foreignKey: "athleteId",
+  as: "atleta",
+  onUpdate: "CASCADE",
+  onDelete: "RESTRICT",
+});
 
 module.exports = db;

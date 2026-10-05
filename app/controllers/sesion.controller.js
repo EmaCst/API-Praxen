@@ -1,5 +1,6 @@
 const db = require("../models");
 const Sesion = db.sesiones;
+const Atleta = db.atletas;
 const { validateSession } = require("../utils/sesion.validator.js");
 
 function toResponse(sesion) {
@@ -26,6 +27,13 @@ exports.create = async (req, res) => {
     }
 
     const body = req.body;
+    const atleta = await Atleta.findByPk(body.athleteId);
+    if (!atleta) {
+      return res.status(404).json({
+        message: "El atleta indicado no existe. Créalo primero en /api/atletas.",
+      });
+    }
+
     const [sesion, created] = await Sesion.findOrCreate({
       where: { sessionId: body.sessionId },
       defaults: {
@@ -65,6 +73,11 @@ exports.findByAthlete = async (req, res) => {
     }
     if (!Number.isInteger(offset) || offset < 0) {
       return res.status(400).json({ message: "offset debe ser un entero igual o mayor que 0." });
+    }
+
+    const atleta = await Atleta.findByPk(athleteId, { attributes: ["id"] });
+    if (!atleta) {
+      return res.status(404).json({ message: "Atleta no encontrado." });
     }
 
     const result = await Sesion.findAndCountAll({

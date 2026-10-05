@@ -3,6 +3,7 @@ require("dotenv").config();
 const cors = require("cors");
 const express = require("express");
 const db = require("./app/models");
+const athleteRoutes = require("./app/routes/atleta.routes.js");
 const sessionRoutes = require("./app/routes/sesion.routes.js");
 const apiKeyAuth = require("./app/middleware/api-key.middleware.js");
 
@@ -36,6 +37,7 @@ app.get("/api/health", (req, res) => {
   res.json({ service: "API Praxen", status: "ok" });
 });
 
+app.use("/api/atletas", apiKeyAuth, athleteRoutes);
 app.use("/api/sesiones", apiKeyAuth, sessionRoutes);
 
 app.use((req, res) => {
