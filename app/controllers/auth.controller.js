@@ -189,14 +189,22 @@ exports.resetPassword = async (req, res) => {
   }
   try {
     const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
-    const user = await db.usuarios.findOne({ where: { resetTokenHash: tokenHash } });
-    if (!user || !user.resetExpiresAt || user.resetExpiresAt.getTime() <= Date.now()) {
+    const updated = await db.sequelize.transaction(async (transaction) => {
+      const user = await db.usuarios.findOne({
+        where: { resetTokenHash: tokenHash },
+        transaction,
+        lock: transaction.LOCK.UPDATE,
+      });
+      if (!user || !user.resetExpiresAt || user.resetExpiresAt.getTime() <= Date.now()) return false;
+      user.passwordHash = await bcrypt.hash(password, 12);
+      user.resetTokenHash = null;
+      user.resetExpiresAt = null;
+      await user.save({ transaction });
+      return true;
+    });
+    if (!updated) {
       return res.status(400).json({ message: "El enlace de recuperación no es válido o ha caducado." });
     }
-    user.passwordHash = await bcrypt.hash(password, 12);
-    user.resetTokenHash = null;
-    user.resetExpiresAt = null;
-    await user.save();
     return res.status(200).json({ message: "Contraseña actualizada correctamente." });
   } catch (error) {
     console.error("Error al restablecer contraseña:", error);
