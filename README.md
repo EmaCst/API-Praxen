@@ -1,81 +1,88 @@
 # API Praxen
 
-API REST para guardar las sesiones de ejercicios de la app Unity Praxen. Está construida con Node.js, Express, Sequelize y PostgreSQL (Neon).
-
-## Requisitos
-
-- Node.js 20 o posterior
-- Una base de datos PostgreSQL
-- Una clave de API de prueba para proteger las rutas
+API REST para cuentas de deportistas y resultados de ejercicios de la app Unity Praxen. Usa Node.js, Express, Sequelize y PostgreSQL (Neon).
 
 ## Ejecutar localmente
 
-1. Instala dependencias con `npm install`.
-2. Copia `.env.example` a `.env` y completa DATABASE_URL y API_KEY.
-3. Ejecuta `npm start`.
+1. Requiere Node.js 20 o posterior y PostgreSQL.
+2. Ejecuta `npm install`.
+3. Copia `.env.example` como `.env` y configura `DATABASE_URL` y un `JWT_SECRET` aleatorio de al menos 32 caracteres.
+4. Ejecuta `npm start`.
 
-Al iniciar, Sequelize verifica la conexión y crea las tablas si aún no existen. No se debe habilitar sincronización destructiva.
+Al iniciar, la API comprueba la conexión, crea las tablas que falten y aplica la migración compatible con los atletas ya creados. No usa sincronización destructiva. En producción configura también SMTP y el cliente OAuth de Google.
 
 ## Variables de entorno
 
-- DATABASE_URL: URL PostgreSQL de Neon; usar la URL con pooler.
-- API_KEY: clave de prueba enviada en el encabezado x-api-key.
-- PORT: puerto del servidor (por defecto 8080).
-- CORS_ORIGINS: orígenes web permitidos separados por comas. Las llamadas nativas de Unity no envían Origin.
-- DB_POOL_MAX: máximo de conexiones por proceso (por defecto 5).
-- NODE_ENV: development o production.
+- `DATABASE_URL`: URL de PostgreSQL/Neon. Usa la URL con pooler para el despliegue.
+- `JWT_SECRET`: secreto privado de 32 caracteres o más; no lo incluyas en Unity ni en Git.
+- `JWT_EXPIRES_IN`: duración del token (por defecto `12h`).
+- `GOOGLE_CLIENT_IDS`: client IDs OAuth permitidos, separados por comas. El servidor verifica los ID tokens que envía la app.
+- `PASSWORD_RESET_URL`: deep link que abre la pantalla de cambio de contraseña en Praxen.
+- `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM`: servidor de correo para enviar enlaces de recuperación.
+- `PORT`: puerto HTTP (por defecto 8080).
+- `CORS_ORIGINS`: orígenes web permitidos separados por comas; Unity nativa normalmente no envía `Origin`.
+- `DB_POOL_MAX`: máximo de conexiones PostgreSQL por proceso (por defecto 5).
+- `DB_SSL`: habilita SSL para PostgreSQL (por defecto según la configuración del proveedor).
+- `NODE_ENV`: entorno, por ejemplo `development` o `production`.
 
-La clave compartida sirve para pruebas controladas. Una clave incluida dentro de un APK se puede extraer; para una publicación con cuentas se debe sustituir por autenticación con tokens de usuario.
+## Autenticación
 
-## Rutas
+Todas las rutas de `/api/atletas` y `/api/sesiones` requieren `Authorization: Bearer <token>`. Los tokens los emite la API después de validar correo/contraseña o un ID token de Google. El `athleteId` enviado dentro de una sesión se ignora: el servidor la guarda asociada al atleta autenticado.
 
-### GET /api/health
+### POST `/api/auth/register`
 
-Comprueba que el proceso HTTP está activo.
+Entrada: `{ "nombre": "Ana Pérez", "email": "ana@example.com", "password": "una-clave-segura" }`.
 
-### POST /api/atletas
+Crea una cuenta y su perfil de atleta en una transacción, cifra la contraseña con bcrypt y devuelve `token`, `user` y `atleta`.
 
-Crea un atleta con el campo nombre. La respuesta contiene el id que Unity debe enviar como athleteId en las sesiones.
+### POST `/api/auth/login`
 
-### GET /api/atletas?limit=20&offset=0
+Entrada: `{ "email": "ana@example.com", "password": "una-clave-segura" }`. Devuelve un token Bearer y los datos básicos de la cuenta.
 
-Lista atletas con paginación.
+### POST `/api/auth/google`
 
-### GET /api/atletas/:id
+Entrada: `{ "idToken": "<Google ID token>" }`. La API verifica firma, audiencia, emisor, caducidad y correo verificado con Google, y luego emite su propio token. Requiere `GOOGLE_CLIENT_IDS` con los client IDs de OAuth configurados para la app.
 
-Consulta un atleta.
+### POST `/api/auth/forgot-password`
 
-### GET /api/atletas/:id/sesiones
+Entrada: `{ "email": "ana@example.com" }`. Responde con el mismo mensaje tanto si existe la cuenta como si no. Envía un enlace de un solo uso que caduca en 30 minutos. En desarrollo, si no hay SMTP, el enlace se escribe en la consola del servidor; en producción configura un proveedor SMTP.
 
-Consulta las sesiones de un atleta.
+### POST `/api/auth/reset-password`
 
-### POST /api/sesiones
+Entrada: `{ "token": "<token del enlace>", "newPassword": "otra-clave-segura" }`. Al aceptar el cambio, el token queda invalidado.
 
-Guarda una sesión con el formato de SessionResultData de Unity. Requiere Content-Type: application/json y x-api-key. La operación es idempotente por sessionId: un reintento con el mismo UUID no duplica el registro. athleteId debe referenciar un atleta previamente registrado.
+Las rutas de autenticación tienen límite de solicitudes por IP. Las contraseñas no se guardan en claro.
 
-La respuesta de una sesión nueva es HTTP 201 con created: true. Un reintento recibe HTTP 200 con created: false.
+## Datos de la cuenta
 
-### GET /api/sesiones?athleteId=1&limit=20&offset=0
+### GET `/api/atletas/me`
 
-Devuelve las sesiones del atleta ordenadas por fecha descendente.
+Devuelve el perfil de atleta asociado al usuario autenticado.
 
-### GET /api/sesiones/:sessionId
+### GET `/api/atletas/me/sesiones`
 
-Devuelve una sesión por UUID.
+Devuelve las sesiones del usuario autenticado, de más reciente a más antigua.
 
-## Ejemplo de envío
+## Sesiones de ejercicios
 
-```bash
-curl -X POST http://localhost:8080/api/sesiones \
-  -H 'Content-Type: application/json' \
-  -H 'x-api-key: cambia-esta-clave' \
-  --data @session.json
-```
+### POST `/api/sesiones`
 
-## Modelo de almacenamiento
+Guarda un resultado con el formato `SessionResultData` de Unity. Requiere `Content-Type: application/json` y un token Bearer. La operación es idempotente por `sessionId`; repetir una sesión de otra cuenta responde HTTP 409.
 
-La tabla athletes guarda los registros básicos de deportistas y training_sessions los relaciona mediante athleteId. Los arreglos de resultados se conservan en columnas JSONB para no descartar intentos, métricas ni coordenadas del área calibrada.
+Una sesión nueva devuelve HTTP 201 con `created: true`; un reintento de la misma cuenta devuelve HTTP 200 con `created: false`.
+
+### GET `/api/sesiones?limit=20&offset=0`
+
+Devuelve las sesiones de la cuenta autenticada con paginación.
+
+### GET `/api/sesiones/:sessionId`
+
+Devuelve una sesión propia por UUID; no revela si una sesión ajena existe.
+
+## Google en Android
+
+La ruta `/api/auth/google` sirve para iniciar sesión con una cuenta Google normal. La app Android debe obtener el ID token usando el flujo Google Identity Services y enviarlo por HTTPS. Iniciar sesión con un perfil de Google Play Games es una integración distinta; requiere configurarla en Play Console y no se debe sustituir un flujo por el otro.
 
 ## Pruebas
 
-Ejecuta `npm test` para validar el contrato de entrada. Las pruebas no requieren una base Neon.
+Ejecuta `npm test`. Las pruebas de validación no necesitan una base de datos Neon. Para probar rutas, configura una base PostgreSQL y usa Postman o curl con el token devuelto al registrar o iniciar sesión.

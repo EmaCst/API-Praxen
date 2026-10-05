@@ -2,7 +2,7 @@
   "name": "api-praxen",
   "version": "1.0.0",
   "private": true,
-  "description": "API REST para guardar resultados de ejercicios de Praxen",
+  "description": "API REST de Praxen para cuentas y resultados de ejercicios",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
@@ -14,7 +14,12 @@
   "dependencies": {
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
+    "express-rate-limit": "^7.5.0",
     "express": "^5.1.0",
+    "google-auth-library": "^9.15.1",
+    "bcryptjs": "^2.4.3",
+    "jsonwebtoken": "^9.0.2",
+    "nodemailer": "^6.10.1",
     "pg": "^8.16.3",
     "pg-hstore": "^2.3.4",
     "sequelize": "^6.37.7"

@@ -19,6 +19,20 @@ db.Sequelize = Sequelize;
 db.sequelize = sequelize;
 db.atletas = require("./atleta.model.js")(sequelize, Sequelize.DataTypes);
 db.sesiones = require("./sesion.model.js")(sequelize, Sequelize.DataTypes);
+db.usuarios = require("./usuario.model.js")(sequelize, Sequelize.DataTypes);
+
+db.usuarios.hasOne(db.atletas, {
+  foreignKey: "userId",
+  as: "atleta",
+  onUpdate: "CASCADE",
+  onDelete: "SET NULL",
+});
+db.atletas.belongsTo(db.usuarios, {
+  foreignKey: "userId",
+  as: "usuario",
+  onUpdate: "CASCADE",
+  onDelete: "SET NULL",
+});
 
 db.atletas.hasMany(db.sesiones, {
   foreignKey: "athleteId",

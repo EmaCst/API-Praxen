@@ -3,9 +3,7 @@ const atletaController = require("../controllers/atleta.controller.js");
 
 const router = express.Router();
 
-router.post("/", atletaController.create);
-router.get("/", atletaController.findAll);
-router.get("/:id/sesiones", atletaController.findSessions);
-router.get("/:id", atletaController.findOne);
+router.get("/me", atletaController.me);
+router.get("/me/sesiones", atletaController.mySessions);
 
 module.exports = router;

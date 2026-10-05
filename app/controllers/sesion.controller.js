@@ -18,7 +18,7 @@ function toResponse(sesion) {
 
 exports.create = async (req, res) => {
   try {
-    const validation = validateSession(req.body);
+    const validation = validateSession({ ...req.body, athleteId: req.auth.athleteId });
     if (!validation.valid) {
       return res.status(400).json({
         message: "Los datos de la sesión no son válidos.",
@@ -27,7 +27,8 @@ exports.create = async (req, res) => {
     }
 
     const body = req.body;
-    const atleta = await Atleta.findByPk(body.athleteId);
+    const athleteId = req.auth.athleteId;
+    const atleta = await Atleta.findOne({ where: { id: athleteId, userId: req.auth.userId } });
     if (!atleta) {
       return res.status(404).json({
         message: "El atleta indicado no existe. Créalo primero en /api/atletas.",
@@ -38,7 +39,7 @@ exports.create = async (req, res) => {
       where: { sessionId: body.sessionId },
       defaults: {
         sessionId: body.sessionId,
-        athleteId: body.athleteId,
+        athleteId,
         mode: body.mode,
         startedAt: new Date(body.startedAt),
         endedAt: new Date(body.endedAt),
@@ -47,6 +48,9 @@ exports.create = async (req, res) => {
         footExercises: body.footExercises || [],
       },
     });
+    if (sesion.athleteId !== athleteId) {
+      return res.status(409).json({ message: "sessionId ya está asociado a otra cuenta." });
+    }
 
     return res.status(created ? 201 : 200).json({
       message: created ? "Sesión guardada correctamente." : "La sesión ya estaba guardada.",
@@ -61,13 +65,10 @@ exports.create = async (req, res) => {
 
 exports.findByAthlete = async (req, res) => {
   try {
-    const athleteId = Number(req.query.athleteId);
+    const athleteId = req.auth.athleteId;
     const limit = req.query.limit === undefined ? 20 : Number(req.query.limit);
     const offset = req.query.offset === undefined ? 0 : Number(req.query.offset);
 
-    if (!Number.isInteger(athleteId) || athleteId < 1) {
-      return res.status(400).json({ message: "athleteId debe ser un entero positivo." });
-    }
     if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
       return res.status(400).json({ message: "limit debe estar entre 1 y 100." });
     }
@@ -75,7 +76,7 @@ exports.findByAthlete = async (req, res) => {
       return res.status(400).json({ message: "offset debe ser un entero igual o mayor que 0." });
     }
 
-    const atleta = await Atleta.findByPk(athleteId, { attributes: ["id"] });
+    const atleta = await Atleta.findOne({ where: { id: athleteId, userId: req.auth.userId }, attributes: ["id"] });
     if (!atleta) {
       return res.status(404).json({ message: "Atleta no encontrado." });
     }
@@ -101,7 +102,7 @@ exports.findByAthlete = async (req, res) => {
 
 exports.findOne = async (req, res) => {
   try {
-    const sesion = await Sesion.findByPk(req.params.sessionId);
+    const sesion = await Sesion.findOne({ where: { sessionId: req.params.sessionId, athleteId: req.auth.athleteId } });
     if (!sesion) {
       return res.status(404).json({ message: "Sesión no encontrada." });
     }

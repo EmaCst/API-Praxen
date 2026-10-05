@@ -2,10 +2,14 @@ require("dotenv").config();
 
 const cors = require("cors");
 const express = require("express");
+const fs = require("node:fs");
+const path = require("node:path");
+const { rateLimit } = require("express-rate-limit");
 const db = require("./app/models");
 const athleteRoutes = require("./app/routes/atleta.routes.js");
 const sessionRoutes = require("./app/routes/sesion.routes.js");
-const apiKeyAuth = require("./app/middleware/api-key.middleware.js");
+const authRoutes = require("./app/routes/auth.routes.js");
+const authenticate = require("./app/middleware/auth.middleware.js");
 
 const app = express();
 const allowedOrigins = (process.env.CORS_ORIGINS || "")
@@ -23,7 +27,7 @@ app.use(
       return callback(new Error("Origen no permitido por CORS."));
     },
     methods: ["GET", "POST", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "x-api-key"],
+    allowedHeaders: ["Content-Type", "Authorization"],
   })
 );
 
@@ -37,8 +41,9 @@ app.get("/api/health", (req, res) => {
   res.json({ service: "API Praxen", status: "ok" });
 });
 
-app.use("/api/atletas", apiKeyAuth, athleteRoutes);
-app.use("/api/sesiones", apiKeyAuth, sessionRoutes);
+app.use("/api/auth", rateLimit({ windowMs: 15 * 60 * 1000, limit: 30, standardHeaders: "draft-7", legacyHeaders: false }), authRoutes);
+app.use("/api/atletas", authenticate, athleteRoutes);
+app.use("/api/sesiones", authenticate, sessionRoutes);
 
 app.use((req, res) => {
   res.status(404).json({ message: "Ruta no encontrada." });
@@ -64,6 +69,10 @@ app.use((error, req, res, next) => {
 async function startServer() {
   await db.sequelize.authenticate();
   await db.sequelize.sync();
+  const migration = fs.readFileSync(path.join(__dirname, "app/db/migrations/001-auth.sql"), "utf8");
+  for (const statement of migration.split(";").map((part) => part.trim()).filter(Boolean)) {
+    await db.sequelize.query(statement);
+  }
 
   const port = Number(process.env.PORT) || 8080;
   return app.listen(port, () => {
