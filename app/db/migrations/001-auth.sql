@@ -14,3 +14,5 @@ ALTER TABLE athletes
 
 CREATE UNIQUE INDEX IF NOT EXISTS athletes_user_id_unique_idx ON athletes(user_id);
 CREATE UNIQUE INDEX IF NOT EXISTS users_google_subject_unique_idx ON users(google_subject);
+
+ALTER TABLE athletes ADD COLUMN IF NOT EXISTS federacion VARCHAR(120);

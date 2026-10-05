@@ -31,7 +31,7 @@ Todas las rutas de `/api/atletas` y `/api/sesiones` requieren `Authorization: Be
 
 ### POST `/api/auth/register`
 
-Entrada: `{ "nombre": "Ana Pérez", "email": "ana@example.com", "password": "una-clave-segura" }`.
+Entrada: `{ "nombre": "Ana Pérez", "federacion": "Atletismo", "email": "ana@example.com", "password": "una-clave-segura" }`.
 
 Crea una cuenta y su perfil de atleta en una transacción, cifra la contraseña con bcrypt y devuelve `token`, `user` y `atleta`.
 
@@ -41,7 +41,7 @@ Entrada: `{ "email": "ana@example.com", "password": "una-clave-segura" }`. Devue
 
 ### POST `/api/auth/google`
 
-Entrada: `{ "idToken": "<Google ID token>" }`. La API verifica firma, audiencia, emisor, caducidad y correo verificado con Google, y luego emite su propio token. Requiere `GOOGLE_CLIENT_IDS` con los client IDs de OAuth configurados para la app.
+Entrada en el primer registro: `{ "idToken": "<Google ID token>", "federacion": "Atletismo" }`. En inicios posteriores basta el ID token. La federación no se obtiene del correo Google. La API verifica firma, audiencia, emisor, caducidad y correo verificado con Google, y luego emite su propio token. Requiere `GOOGLE_CLIENT_IDS` con los client IDs de OAuth configurados para la app.
 
 ### POST `/api/auth/forgot-password`
 
@@ -57,7 +57,11 @@ Las rutas de autenticación tienen límite de solicitudes por IP. Las contraseñ
 
 ### GET `/api/atletas/me`
 
-Devuelve el perfil de atleta asociado al usuario autenticado.
+Devuelve el perfil de atleta asociado al usuario autenticado, incluyendo `nombre` y `federacion`.
+
+### PATCH `/api/atletas/me`
+
+Entrada: `{ "federacion": "Atletismo" }`. Permite completar o cambiar la federación del propio atleta. Los registros anteriores conservan `null` hasta que se complete el campo; no se inventa una federación para datos existentes.
 
 ### GET `/api/atletas/me/sesiones`
 

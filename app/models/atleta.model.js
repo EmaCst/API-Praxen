@@ -11,6 +11,10 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.STRING(120),
         allowNull: false,
       },
+      federacion: {
+        type: DataTypes.STRING(120),
+        allowNull: true,
+      },
       userId: {
         type: DataTypes.INTEGER,
         allowNull: true,

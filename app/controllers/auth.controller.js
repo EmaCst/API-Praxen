@@ -9,6 +9,7 @@ const {
   validateRegistration,
   validateLogin,
   validateNewPassword,
+  validateFederation,
 } = require("../utils/auth.validator.js");
 
 const GENERIC_RESET_MESSAGE = "Si existe una cuenta con ese correo, recibirá instrucciones para cambiar la contraseña.";
@@ -26,7 +27,7 @@ function issueToken(user, athlete) {
     issuer: "api-praxen",
     audience: "praxen-app",
   });
-  return { token, user: safeUser(user), atleta: { id: athlete.id, nombre: athlete.nombre } };
+  return { token, user: safeUser(user), atleta: { id: athlete.id, nombre: athlete.nombre, federacion: athlete.federacion } };
 }
 
 function authResponse(res, user, athlete, status = 200) {
@@ -56,7 +57,7 @@ exports.register = async (req, res) => {
     const passwordHash = await bcrypt.hash(req.body.password, 12);
     const created = await db.sequelize.transaction(async (transaction) => {
       const user = await db.usuarios.create({ nombre: req.body.nombre.trim(), email, passwordHash }, { transaction });
-      const athlete = await db.atletas.create({ nombre: req.body.nombre.trim(), userId: user.id }, { transaction });
+      const athlete = await db.atletas.create({ nombre: req.body.nombre.trim(), federacion: req.body.federacion.trim(), userId: user.id }, { transaction });
       return { user, athlete };
     });
     return authResponse(res, created.user, created.athlete, 201);
@@ -119,7 +120,12 @@ exports.googleLogin = async (req, res) => {
         }
       }
       let athlete = await db.atletas.findOne({ where: { userId: user.id }, transaction });
-      if (!athlete) athlete = await db.atletas.create({ nombre: user.nombre, userId: user.id }, { transaction });
+      if (!athlete) {
+        if (!validateFederation(req.body.federacion)) {
+          throw Object.assign(new Error("Indica federacion (entre 2 y 120 caracteres) para completar el primer registro con Google."), { statusCode: 400 });
+        }
+        athlete = await db.atletas.create({ nombre: user.nombre, federacion: req.body.federacion.trim(), userId: user.id }, { transaction });
+      }
       return { user, athlete };
     });
     return authResponse(res, result.user, result.athlete);
@@ -185,7 +191,7 @@ exports.resetPassword = async (req, res) => {
   const token = req.body && req.body.token;
   const password = req.body && req.body.newPassword;
   if (typeof token !== "string" || token.length < 32 || !validateNewPassword(password)) {
-    return res.status(400).json({ message: "token no es válido o newPassword debe tener entre 8 y 72 caracteres." });
+    return res.status(400).json({ message: "token no es válido o newPassword debe tener al menos 8 caracteres y no superar 72 bytes UTF-8." });
   }
   try {
     const tokenHash = crypto.createHash("sha256").update(token).digest("hex");

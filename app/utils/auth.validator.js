@@ -13,8 +13,11 @@ function validateRegistration(body) {
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizeEmail(body.email)) || normalizeEmail(body.email).length > 254) {
     errors.push("email debe ser una dirección válida.");
   }
-  if (typeof body.password !== "string" || body.password.length < 8 || body.password.length > 72) {
-    errors.push("password debe tener entre 8 y 72 caracteres.");
+  if (!validateFederation(body.federacion)) {
+    errors.push("federacion debe tener entre 2 y 120 caracteres.");
+  }
+  if (!validateNewPassword(body.password)) {
+    errors.push("password debe tener al menos 8 caracteres y no superar 72 bytes UTF-8.");
   }
   return { valid: errors.length === 0, errors };
 }
@@ -25,7 +28,11 @@ function validateLogin(body) {
 }
 
 function validateNewPassword(password) {
-  return typeof password === "string" && password.length >= 8 && password.length <= 72;
+  return typeof password === "string" && password.length >= 8 && Buffer.byteLength(password, "utf8") <= 72;
 }
 
-module.exports = { normalizeEmail, validateRegistration, validateLogin, validateNewPassword };
+function validateFederation(value) {
+  return typeof value === "string" && value.trim().length >= 2 && value.trim().length <= 120;
+}
+
+module.exports = { normalizeEmail, validateRegistration, validateLogin, validateNewPassword, validateFederation };
