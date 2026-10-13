@@ -1,7 +1,8 @@
+const { isDeepStrictEqual } = require("node:util");
 const db = require("../models");
 const Sesion = db.sesiones;
 const Atleta = db.atletas;
-const { validateSession } = require("../utils/sesion.validator.js");
+const { validateSession, UUID_PATTERN } = require("../utils/sesion.validator.js");
 
 function toResponse(sesion) {
   return {
@@ -36,9 +37,9 @@ exports.create = async (req, res) => {
     }
 
     const [sesion, created] = await Sesion.findOrCreate({
-      where: { sessionId: body.sessionId },
+      where: { sessionId: body.sessionId.toLowerCase() },
       defaults: {
-        sessionId: body.sessionId,
+        sessionId: body.sessionId.toLowerCase(),
         athleteId,
         mode: body.mode,
         startedAt: new Date(body.startedAt),
@@ -50,6 +51,19 @@ exports.create = async (req, res) => {
     });
     if (sesion.athleteId !== athleteId) {
       return res.status(409).json({ message: "sessionId ya está asociado a otra cuenta." });
+    }
+
+    if (!created) {
+      const expected = {
+        sessionId: body.sessionId.toLowerCase(), athleteId, mode: body.mode,
+        startedAt: new Date(body.startedAt).toISOString(),
+        endedAt: new Date(body.endedAt).toISOString(),
+        exercises: body.exercises || [], runningExercises: body.runningExercises || [],
+        footExercises: body.footExercises || [],
+      };
+      if (!isDeepStrictEqual(toResponse(sesion), expected)) {
+        return res.status(409).json({ message: "sessionId ya tiene resultados distintos. Usa el mismo JSON para reintentar." });
+      }
     }
 
     return res.status(created ? 201 : 200).json({
@@ -101,6 +115,9 @@ exports.findByAthlete = async (req, res) => {
 };
 
 exports.findOne = async (req, res) => {
+  if (!UUID_PATTERN.test(req.params.sessionId || "")) {
+    return res.status(400).json({ message: "sessionId debe ser un UUID válido." });
+  }
   try {
     const sesion = await Sesion.findOne({ where: { sessionId: req.params.sessionId, athleteId: req.auth.athleteId } });
     if (!sesion) {
@@ -109,6 +126,6 @@ exports.findOne = async (req, res) => {
     return res.status(200).json(toResponse(sesion));
   } catch (error) {
     console.error("Error al consultar sesión:", error);
-    return res.status(400).json({ message: "sessionId no es válido." });
+    return res.status(500).json({ message: "Error al consultar la sesión." });
   }
 };
