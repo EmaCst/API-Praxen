@@ -1,108 +1,114 @@
 # API Praxen
 
-API REST para cuentas de deportistas y resultados de ejercicios de la app Unity Praxen. Usa Node.js, Express, Sequelize y PostgreSQL (Neon).
+API REST de Praxen para usuarios, atletas y resultados de entrenamiento. Usa Node.js, Express, Sequelize y PostgreSQL (Neon).
 
-## Ejecutar localmente
+## Ejecutar
 
-1. Requiere Node.js 20 o posterior y PostgreSQL.
-2. Ejecuta `npm install`.
-3. Copia `.env.example` como `.env` y configura `DATABASE_URL` y un `JWT_SECRET` aleatorio de al menos 32 caracteres.
-4. Ejecuta `npm start`.
+Requiere Node.js 20 o posterior y PostgreSQL. En el directorio del repositorio:
 
-Al iniciar, la API comprueba la conexión, crea las tablas que falten y aplica la migración compatible con los atletas ya creados. No usa sincronización destructiva. En producción configura también SMTP y el cliente OAuth de Google.
+```bash
+npm install
+```
+
+Copia `.env.example` a `.env`. Configura `DATABASE_URL` con la conexión pooled de Neon y `JWT_SECRET` con un secreto privado aleatorio de al menos 32 caracteres. Para generarlo:
+
+```bash
+node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"
+```
+
+Luego ejecuta:
+
+```bash
+npm start
+```
+
+El arranque autentica la conexión, crea las tablas que faltan con `sequelize.sync()` y ejecuta `001-auth.sql`. No borra tablas ni usa `force` o `alter`.
+
+### Cambio de correo a nombre de usuario
+
+Esta versión registra e inicia sesión con **`username` y contraseña**, sin correo electrónico. `nombre` conserva el nombre real de la persona y puede repetirse; `username` es el identificador único de acceso.
+
+Para esta prueba se acordó recrear las tablas de Neon. Si todavía existe `users` con el esquema anterior de correo, el arranque se detiene con un mensaje explícito: `sync()` no cambia por sí solo las columnas existentes. La API no migra ni elimina esas cuentas automáticamente. Una base vacía crea `users`, `athletes` y `training_sessions` al ejecutar `npm start`.
+
+Después de reiniciar la base, genera un **nuevo `JWT_SECRET`** tanto localmente como en Render para invalidar los tokens de las cuentas anteriores. Reutilizar IDs con los tokens anteriores podría atribuirlos a cuentas nuevas. Todos deberán registrarse de nuevo.
+
+Google y recuperación por correo quedan retirados de esta versión. No se requieren variables SMTP, Google ni enlaces de recuperación. No se añadió un mecanismo de recuperación alternativo.
 
 ## Variables de entorno
 
-- `DATABASE_URL`: URL de PostgreSQL/Neon. Usa la URL con pooler para el despliegue.
-- `JWT_SECRET`: secreto privado de 32 caracteres o más; no lo incluyas en Unity ni en Git.
-- `JWT_EXPIRES_IN`: duración del token (por defecto `12h`).
-- `GOOGLE_CLIENT_IDS`: client IDs OAuth permitidos, separados por comas. El servidor verifica los ID tokens que envía la app.
-- `PASSWORD_RESET_URL`: deep link que abre la pantalla de cambio de contraseña en Praxen.
-- `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM`: servidor de correo para enviar enlaces de recuperación.
-- `PORT`: puerto HTTP (por defecto 8080).
-- `CORS_ORIGINS`: orígenes web permitidos separados por comas; Unity nativa normalmente no envía `Origin`.
-- `DB_POOL_MAX`: máximo de conexiones PostgreSQL por proceso (por defecto 5).
-- `DB_SSL`: habilita SSL para PostgreSQL (por defecto según la configuración del proveedor).
-- `NODE_ENV`: entorno, por ejemplo `development` o `production`.
+| Variable | Uso |
+| --- | --- |
+| `DATABASE_URL` | Conexión completa de PostgreSQL/Neon, con usuario y contraseña. |
+| `DB_SSL` | `true` para Neon. |
+| `DB_POOL_MAX` | Máximo de conexiones por proceso; predeterminado 5. |
+| `JWT_SECRET` | Secreto privado de al menos 32 caracteres. Nunca va en Unity ni Git. |
+| `JWT_EXPIRES_IN` | Duración del token; predeterminado `12h`. |
+| `NODE_ENV` | `development` localmente y `production` en Render. |
+| `PORT` | Puerto HTTP; predeterminado 8080. Render proporciona su propio valor. |
+| `CORS_ORIGINS` | URLs web permitidas, separadas por comas. Puede estar vacío para Unity nativa y Thunder Client. |
+| `TRUST_PROXY_HOPS` | Número de proxies confiables del hosting; predeterminado 0. Configúralo según el proveedor. |
 
 ## Autenticación
 
-Todas las rutas de `/api/atletas` y `/api/sesiones` requieren `Authorization: Bearer <token>`. Los tokens los emite la API después de validar correo/contraseña o un ID token de Google. El `athleteId` enviado dentro de una sesión se ignora: el servidor la guarda asociada al atleta autenticado.
-
 ### POST `/api/auth/register`
 
-Entrada: `{ "nombre": "Ana Pérez", "federacion": "Atletismo", "email": "ana@example.com", "password": "una-clave-segura" }`.
+```json
+{
+  "nombre": "David Castellanos",
+  "federacion": "Atletismo",
+  "username": "david.castellanos",
+  "password": "una-clave-segura"
+}
+```
 
-Crea una cuenta y su perfil de atleta en una transacción, cifra la contraseña con bcrypt y devuelve `token`, `user` y `atleta`.
+`username` tiene entre 3 y 32 caracteres y empieza con letra o número. Admite letras ASCII, números, punto, guion y guion bajo; no admite espacios internos, correo ni tildes. Se eliminan espacios exteriores y se guarda en minúsculas. `David.Castellanos` y `david.castellanos` son la misma cuenta. Las restricciones únicas de PostgreSQL evitan duplicados incluso entre solicitudes simultáneas.
+
+La contraseña debe tener al menos 8 caracteres y no superar 72 bytes UTF-8. Se guarda un hash **bcrypt con factor 12**, nunca la contraseña original. Cuenta y atleta se crean en una transacción.
+
+Responde **201** con `token`, `user: { id, nombre, username }` y `atleta: { id, nombre, federacion }`. No devuelve hash ni contraseña. Username repetido: **409**; datos inválidos: **400**.
 
 ### POST `/api/auth/login`
 
-Entrada: `{ "email": "ana@example.com", "password": "una-clave-segura" }`. Devuelve un token Bearer y los datos básicos de la cuenta.
+```json
+{
+  "username": "david.castellanos",
+  "password": "una-clave-segura"
+}
+```
 
-### POST `/api/auth/google`
+Responde **200** con el mismo formato del registro. Usuario inexistente o contraseña incorrecta devuelven el mismo error **401**. Un payload que solo contiene `email` ya no es válido.
 
-Entrada en el primer registro: `{ "idToken": "<Google ID token>", "federacion": "Atletismo" }`. En inicios posteriores basta el ID token. La federación no se obtiene del correo Google. La API verifica firma, audiencia, emisor, caducidad y correo verificado con Google, y luego emite su propio token. Requiere `GOOGLE_CLIENT_IDS` con los client IDs de OAuth configurados para la app.
+Las rutas de autenticación limitan solicitudes por IP. Las rutas `/api/auth/google`, `/api/auth/forgot-password` y `/api/auth/reset-password` ya no están disponibles.
 
-### POST `/api/auth/forgot-password`
+## Perfil y resultados
 
-Entrada: `{ "email": "ana@example.com" }`. Responde con el mismo mensaje tanto si existe la cuenta como si no. Envía un enlace de un solo uso que caduca en 30 minutos. En desarrollo, si no hay SMTP, el enlace se escribe en la consola del servidor; en producción configura un proveedor SMTP.
+Todas las rutas siguientes requieren `Authorization: Bearer <token>`:
 
-### POST `/api/auth/reset-password`
+- `GET /api/atletas/me`: perfil del atleta autenticado.
+- `PATCH /api/atletas/me`: actualiza su federación con `{ "federacion": "Atletismo" }`.
+- `GET /api/atletas/me/sesiones`: sus resultados con paginación.
+- `POST /api/sesiones`: guarda una sesión de Unity.
+- `GET /api/sesiones?limit=20&offset=0`: consulta sesiones propias.
+- `GET /api/sesiones/:sessionId`: consulta una sesión propia por UUID.
 
-Entrada: `{ "token": "<token del enlace>", "newPassword": "otra-clave-segura" }`. Al aceptar el cambio, el token queda invalidado.
+El servidor obtiene `athleteId` del token e ignora cualquier atleta enviado en el JSON. Los resultados mantienen el formato existente: `sessionId`, `mode`, `startedAt`, `endedAt`, `exercises`, `footExercises` y `runningExercises`. Cada resultado conserva sets, duración, descanso y métricas.
 
-Las rutas de autenticación tienen límite de solicitudes por IP. Las contraseñas no se guardan en claro.
+Una sesión nueva devuelve **201** con `created: true`. El mismo UUID y contenido devuelve **200** con `created: false`. Un UUID con contenido distinto o de otra cuenta devuelve **409** sin sobrescribir nada. No se exponen resultados de otras cuentas.
 
-## Datos de la cuenta
+## Render
 
-### GET `/api/atletas/me`
+Usa la rama que contiene esta versión, actualmente `feature/cloud-results`:
 
-Devuelve el perfil de atleta asociado al usuario autenticado, incluyendo `nombre` y `federacion`.
+- Build: `npm ci --omit=dev`
+- Start: `npm start`
+- Variables: `NODE_ENV=production`, `DATABASE_URL`, `DB_SSL=true`, `DB_POOL_MAX=5`, `JWT_SECRET` y `JWT_EXPIRES_IN=12h`.
 
-### PATCH `/api/atletas/me`
+También se incluye Dockerfile. No subas `.env`. `GET /api/health` devuelve **200** con `database: "ok"` si PostgreSQL responde, o **503** si no está disponible.
 
-Entrada: `{ "federacion": "Atletismo" }`. Permite completar o cambiar la federación del propio atleta. Los registros anteriores conservan `null` hasta que se complete el campo; no se inventa una federación para datos existentes.
+La API desplegada de prueba es `https://api-praxen.onrender.com`. Actualiza el servicio a este commit antes de probar los nuevos payloads.
 
-### GET `/api/atletas/me/sesiones`
+## Pruebas e integración
 
-Devuelve las sesiones del usuario autenticado, de más reciente a más antigua.
+`npm test` ejecuta validadores y pruebas HTTP con bcrypt y JWT reales y una capa de persistencia simulada: registro, login, usernames duplicados, transacción de cuenta/atleta, aislamiento de resultados, idempotencia y errores de DB. GitHub Actions ejecuta las mismas pruebas. Falta comprobar nuevamente el flujo con Neon real después de recrear las tablas.
 
-## Sesiones de ejercicios
-
-### POST `/api/sesiones`
-
-Guarda un resultado con el formato `SessionResultData` de Unity. Requiere `Content-Type: application/json` y un token Bearer. La operación es idempotente por `sessionId`; repetir una sesión de otra cuenta responde HTTP 409.
-
-Una sesión nueva devuelve HTTP 201 con `created: true`; un reintento de la misma cuenta devuelve HTTP 200 con `created: false`.
-
-### GET `/api/sesiones?limit=20&offset=0`
-
-Devuelve las sesiones de la cuenta autenticada con paginación.
-
-### GET `/api/sesiones/:sessionId`
-
-Devuelve una sesión propia por UUID; no revela si una sesión ajena existe.
-
-## Google en Android
-
-La ruta `/api/auth/google` sirve para iniciar sesión con una cuenta Google normal. La app Android debe obtener el ID token usando el flujo Google Identity Services y enviarlo por HTTPS. Iniciar sesión con un perfil de Google Play Games es una integración distinta; requiere configurarla en Play Console y no se debe sustituir un flujo por el otro.
-
-## Pruebas
-
-Ejecuta `npm test`. Las pruebas de validación no necesitan una base de datos Neon. Para probar rutas, configura una base PostgreSQL y usa Postman o curl con el token devuelto al registrar o iniciar sesión.
-
-
-## Envío de resultados a la nube
-
-1. Crea PostgreSQL en Neon y copia su URL de conexión pooled en las variables del hosting como `DATABASE_URL`. No la pongas en Unity ni en Git.
-2. Despliega este repositorio con Node 22, `npm ci --omit=dev` y `npm start`, o con el Dockerfile incluido. Configura `NODE_ENV=production`, `DB_SSL=true` y un `JWT_SECRET` aleatorio de al menos 32 caracteres. Genera uno con `node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"`.
-3. El hosting debe proporcionar HTTPS y `PORT`. Si termina TLS detrás de un proxy, establece `TRUST_PROXY_HOPS` al número de proxies confiables del proveedor. Por defecto es 0.
-4. Comprueba `GET https://TU-API/api/health`: responde 200 y `database: "ok"` solo si PostgreSQL responde. Si falla, devuelve 503 sin exponer credenciales.
-5. En Praxen abre **Cuenta y nube**, indica `https://TU-API` (sin `/api`), registra nombre, federación, correo y contraseña, o inicia sesión. Entrena estando autenticado.
-6. Al terminar se envía `POST /api/sesiones` con `Authorization: Bearer TOKEN`. Los resultados incluyen los tres tipos de ejercicios y conservan sets, duración, descanso, métricas e intentos dentro de cada resultado.
-
-El mismo UUID y contenido devuelve 200 con `created: false`; si el UUID ya contiene resultados diferentes devuelve 409 sin sobrescribirlos. `athleteId` siempre procede del token. `GET /api/sesiones?limit=20&offset=0` y `GET /api/sesiones/:sessionId` devuelven únicamente los resultados del usuario autenticado.
-
-La app conserva pendientes en el teléfono y reintenta con esperas de hasta 120 segundos. Los pendientes quedan vinculados al servidor y atleta originales. Una sesión de invitado se conserva localmente y no se atribuye automáticamente a otra cuenta. El token solo vive en memoria: después de reiniciar o caducar hay que iniciar sesión de nuevo. Los errores permanentes (400, 403, 409, 413) conservan el archivo para diagnóstico sin reintentos continuos.
-
-`npm test` ejecuta validadores y pruebas HTTP de autenticación, aislamiento entre cuentas, persistencia simulada, idempotencia, consulta y fallos de DB. Estas pruebas no sustituyen la comprobación con Neon real. GitHub Actions ejecuta las mismas pruebas en cada push y PR. Para recuperación de contraseña y Google configura además SMTP y `GOOGLE_CLIENT_IDS` como se describe arriba; el panel básico de Unity añadido para esta integración usa correo y contraseña.
+**Unity no se modifica en este cambio.** Su panel anterior todavía envía `email`; antes de integrarlo habrá que cambiar ese formulario y payload a `username`. Los endpoints de resultados y los tokens Bearer mantienen el formato existente.

@@ -77,6 +77,13 @@ app.use((error, req, res, next) => {
 
 async function startServer() {
   await db.sequelize.authenticate();
+  // sync() no transforma tablas antiguas. No borrar datos automáticamente.
+  const [columns] = await db.sequelize.query(
+    "SELECT column_name FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = 'users'"
+  );
+  if (columns.length && (!columns.some((column) => column.column_name === "username") || columns.some((column) => column.column_name === "email"))) {
+    throw new Error("La tabla users todavía usa el esquema de correo. Migra o recrea las tablas de prueba antes de iniciar la versión con username.");
+  }
   await db.sequelize.sync();
   const migration = fs.readFileSync(path.join(__dirname, "app/db/migrations/001-auth.sql"), "utf8");
   for (const statement of migration.split(";").map((part) => part.trim()).filter(Boolean)) {
