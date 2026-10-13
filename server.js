@@ -12,6 +12,10 @@ const authRoutes = require("./app/routes/auth.routes.js");
 const authenticate = require("./app/middleware/auth.middleware.js");
 
 const app = express();
+// Configura el número exacto de proxies de tu hosting (0 para ejecución directa).
+const proxyHops = Number(process.env.TRUST_PROXY_HOPS || 0);
+if (!Number.isInteger(proxyHops) || proxyHops < 0) throw new Error("TRUST_PROXY_HOPS debe ser un entero no negativo.");
+app.set("trust proxy", proxyHops);
 const allowedOrigins = (process.env.CORS_ORIGINS || "")
   .split(",")
   .map((origin) => origin.trim())
@@ -37,8 +41,13 @@ app.get("/", (req, res) => {
   res.json({ service: "API Praxen", status: "ok" });
 });
 
-app.get("/api/health", (req, res) => {
-  res.json({ service: "API Praxen", status: "ok" });
+app.get("/api/health", async (req, res) => {
+  try {
+    await db.sequelize.authenticate();
+    res.json({ service: "API Praxen", status: "ok", database: "ok" });
+  } catch (_) {
+    res.status(503).json({ service: "API Praxen", status: "unavailable", database: "unavailable" });
+  }
 });
 
 app.use("/api/auth", rateLimit({ windowMs: 15 * 60 * 1000, limit: 30, standardHeaders: "draft-7", legacyHeaders: false }), authRoutes);

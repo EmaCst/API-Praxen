@@ -50,3 +50,19 @@ test("rechaza resultados de ejercicio con metrics ausente", () => {
   assert.equal(result.valid, false);
   assert.ok(result.errors.some((error) => error.includes("metrics")));
 });
+
+test("valida el tipo de ejercicio, sets, duración y descanso", () => {
+  for (const patch of [
+    { exerciseType: "feet_targets" }, { sets: 0 }, { sets: 1.5 },
+    { setDurationSeconds: -1 }, { restDurationSeconds: -1 },
+    { restDurationSeconds: "30" },
+  ]) assert.equal(validateSession({ ...validSession, exercises: [{ ...validSession.exercises[0], ...patch }] }).valid, false);
+});
+test("rechaza fechas sin zona horaria y valores numéricos no finitos", () => {
+  assert.equal(validateSession({ ...validSession, startedAt: "2026-10-05" }).valid, false);
+  assert.equal(validateSession({ ...validSession, exercises: [{ exerciseType: "aimlab", metrics: { hits: -1 } }] }).valid, false);
+  assert.equal(validateSession({ ...validSession, exercises: [{ exerciseType: "aimlab", metrics: { averageReactionSeconds: Infinity } }] }).valid, false);
+});
+test("acepta UTC de Unity con siete decimales y duración de los sets", () => {
+  assert.equal(validateSession({ ...validSession, startedAt: "2026-10-05T03:00:00.0000000Z", exercises: [{ ...validSession.exercises[0], sets: 4, setDurationSeconds: 60, restDurationSeconds: 30 }] }).valid, true);
+});

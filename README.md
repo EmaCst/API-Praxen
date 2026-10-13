@@ -90,3 +90,19 @@ La ruta `/api/auth/google` sirve para iniciar sesión con una cuenta Google norm
 ## Pruebas
 
 Ejecuta `npm test`. Las pruebas de validación no necesitan una base de datos Neon. Para probar rutas, configura una base PostgreSQL y usa Postman o curl con el token devuelto al registrar o iniciar sesión.
+
+
+## Envío de resultados a la nube
+
+1. Crea PostgreSQL en Neon y copia su URL de conexión pooled en las variables del hosting como `DATABASE_URL`. No la pongas en Unity ni en Git.
+2. Despliega este repositorio con Node 22, `npm ci --omit=dev` y `npm start`, o con el Dockerfile incluido. Configura `NODE_ENV=production`, `DB_SSL=true` y un `JWT_SECRET` aleatorio de al menos 32 caracteres. Genera uno con `node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"`.
+3. El hosting debe proporcionar HTTPS y `PORT`. Si termina TLS detrás de un proxy, establece `TRUST_PROXY_HOPS` al número de proxies confiables del proveedor. Por defecto es 0.
+4. Comprueba `GET https://TU-API/api/health`: responde 200 y `database: "ok"` solo si PostgreSQL responde. Si falla, devuelve 503 sin exponer credenciales.
+5. En Praxen abre **Cuenta y nube**, indica `https://TU-API` (sin `/api`), registra nombre, federación, correo y contraseña, o inicia sesión. Entrena estando autenticado.
+6. Al terminar se envía `POST /api/sesiones` con `Authorization: Bearer TOKEN`. Los resultados incluyen los tres tipos de ejercicios y conservan sets, duración, descanso, métricas e intentos dentro de cada resultado.
+
+El mismo UUID y contenido devuelve 200 con `created: false`; si el UUID ya contiene resultados diferentes devuelve 409 sin sobrescribirlos. `athleteId` siempre procede del token. `GET /api/sesiones?limit=20&offset=0` y `GET /api/sesiones/:sessionId` devuelven únicamente los resultados del usuario autenticado.
+
+La app conserva pendientes en el teléfono y reintenta con esperas de hasta 120 segundos. Los pendientes quedan vinculados al servidor y atleta originales. Una sesión de invitado se conserva localmente y no se atribuye automáticamente a otra cuenta. El token solo vive en memoria: después de reiniciar o caducar hay que iniciar sesión de nuevo. Los errores permanentes (400, 403, 409, 413) conservan el archivo para diagnóstico sin reintentos continuos.
+
+`npm test` ejecuta validadores y pruebas HTTP de autenticación, aislamiento entre cuentas, persistencia simulada, idempotencia, consulta y fallos de DB. Estas pruebas no sustituyen la comprobación con Neon real. GitHub Actions ejecuta las mismas pruebas en cada push y PR. Para recuperación de contraseña y Google configura además SMTP y `GOOGLE_CLIENT_IDS` como se describe arriba; el panel básico de Unity añadido para esta integración usa correo y contraseña.
