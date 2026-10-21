@@ -33,7 +33,9 @@ function issueToken(user, athlete) {
   // Admin tokens cannot call athlete routes, and app tokens cannot call the dashboard.
   const token = jwt.sign(isAdmin ? {} : { athleteId: athlete.id }, secret, {
     subject: String(user.id),
-    expiresIn: process.env.JWT_EXPIRES_IN || "12h",
+    expiresIn: isAdmin
+      ? (process.env.JWT_ADMIN_EXPIRES_IN || "2h")
+      : (process.env.JWT_EXPIRES_IN || "12h"),
     issuer: "api-praxen",
     audience: isAdmin ? "praxen-dashboard" : "praxen-app",
   });
