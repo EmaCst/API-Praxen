@@ -67,6 +67,14 @@ test("cada tipo de ejercicio mantiene sus métricas separadas", () => {
   assert.equal(latest.sessionId, "s1");
 });
 
+test("precisión de múltiples sets pondera por intentos reales", () => {
+  const training = session("weighted", 1, "2026-01-01T12:00:00.000Z", {hits:1, misses:0});
+  training.exercises.push({exerciseType:"aimlab", metrics:{hits:1, misses:98}});
+  const metrics = sessionExerciseMetrics(training).aimlab.metrics;
+  assert.equal(metrics.accuracyPercent, 2);
+  assert.equal(metrics.hits, 1); // Other metrics remain per-result means.
+});
+
 test("promedio por usuario da el mismo peso a todas sus sesiones", () => {
   const data = summarize(rows.slice(0, 3));
   const aimlab = data.exercises.find(x => x.exerciseType === "aimlab");
