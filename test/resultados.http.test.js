@@ -234,7 +234,7 @@ test("listas y filtros requieren admin y son coherentes por federación", async 
 test("filtros inválidos y consultas fuera de federación no revelan información", async () => {
   for (const query of [
     "?from=2026-02-31", "?from=2026-05-01&to=2026-04-30",
-    "?exerciseType=unknown", "?metric=unknown", "?limit=100000",
+    "?exerciseType=unknown", "?metric=bad%20metric!", "?limit=100000",
   ]) {
     assert.equal((await get("/api/resultados/me/resumen" + query)).status, 400);
   }
