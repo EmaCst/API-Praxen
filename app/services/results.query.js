@@ -2,7 +2,7 @@
 
 const { Op } = require("sequelize");
 const db = require("../models");
-const { EXERCISE_LISTS, METRICS } = require("./results.analytics");
+const { EXERCISE_LISTS, isMetricKey } = require("./results.analytics");
 const { UUID_PATTERN } = require("../utils/sesion.validator");
 
 const MODES = new Set(["individual", "circuit", "custom"]);
@@ -52,8 +52,8 @@ function parseFilters(query, { admin = false, list = false } = {}) {
     throw new ResultsError(400, "exerciseType debe ser aimlab, feet_targets o running_direction_change.");
   }
   const metric = query.metric || null;
-  if (metric && !Object.hasOwn(METRICS, metric)) {
-    throw new ResultsError(400, "La métrica solicitada no está disponible.");
+  if (metric && !isMetricKey(metric)) {
+    throw new ResultsError(400, "La métrica solicitada no es válida.");
   }
   const mode = query.mode || null;
   if (mode && !MODES.has(mode)) {
