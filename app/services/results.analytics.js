@@ -131,14 +131,21 @@ function describeMetric(name, values) {
 }
 
 function summarize(sessions, { population = false, exerciseType } = {}) {
-  const parsed = sessions.map(summarySession);
+  // An exercise-specific summary must also scope its dates and duration:
+  // a later unrelated exercise is NOT the athlete's latest session of type.
+  const parsed = sessions.map(summarySession)
+    .filter(item => !exerciseType || item.exercises[exerciseType]);
   const first = parsed.reduce((v, s) => !v || new Date(s.startedAt) < new Date(v) ? s.startedAt : v, null);
   const last = parsed.reduce((v, s) => !v || new Date(s.startedAt) > new Date(v) ? s.startedAt : v, null);
   const athleteIds = new Set(parsed.map(s => s.athleteId));
   const durations = parsed.filter(s => s.durationSeconds !== null);
+  const durationByAthlete = new Map();
+  for (const s of durations) {
+    if (!durationByAthlete.has(s.athleteId)) durationByAthlete.set(s.athleteId, []);
+    durationByAthlete.get(s.athleteId).push(s.durationSeconds);
+  }
   const durationValues = population
-    ? [...new Set(durations.map(s => s.athleteId))]
-      .map(id => mean(durations.filter(s => s.athleteId === id).map(s => s.durationSeconds)))
+    ? [...durationByAthlete.values()].map(mean)
     : durations.map(s => s.durationSeconds);
   const types = {};
   for (const session of parsed) {
@@ -155,11 +162,8 @@ function summarize(sessions, { population = false, exerciseType } = {}) {
   }
   return {
     aggregationBasis: population ? "equal_weight_per_athlete" : "equal_weight_per_session",
-    totalSessions: exerciseType
-      ? parsed.filter(s => s.exercises[exerciseType]).length : parsed.length,
-    athleteCount: exerciseType
-      ? new Set(parsed.filter(s => s.exercises[exerciseType]).map(s => s.athleteId)).size
-      : athleteIds.size,
+    totalSessions: parsed.length,
+    athleteCount: athleteIds.size,
     firstSessionAt: first,
     lastSessionAt: last,
     averageDurationSeconds: round(mean(durationValues)),
@@ -169,10 +173,17 @@ function summarize(sessions, { population = false, exerciseType } = {}) {
       athletes: group.athletes.size,
       results: group.results,
       metrics: Object.fromEntries(Object.entries(group.values).map(([name, items]) => {
-        const numbers = population
-          ? [...new Set(items.map(item => item.athleteId))].map(id =>
-              mean(items.filter(item => item.athleteId === id).map(item => item.value)))
-          : items.map(item => item.value);
+        let numbers;
+        if (population) {
+          const grouped = new Map();
+          for (const item of items) {
+            if (!grouped.has(item.athleteId)) grouped.set(item.athleteId, []);
+            grouped.get(item.athleteId).push(item.value);
+          }
+          numbers = [...grouped.values()].map(mean);
+        } else {
+          numbers = items.map(item => item.value);
+        }
         return [name, describeMetric(name, numbers)];
       })),
     })),
