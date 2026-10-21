@@ -32,6 +32,25 @@ const METRICS = Object.freeze({
   accuracyPercent: { label: "Precisión", unit: "%", direction: "higher" },
 });
 
+const SAFE_METRIC_KEY = /^[A-Za-z][A-Za-z0-9_]{0,63}$/;
+const EXCLUDED_METRIC_KEYS = new Set([
+  "id", "userId", "athleteId", "sessionId", "seed", "timestamp",
+]);
+
+function isMetricKey(name) {
+  return SAFE_METRIC_KEY.test(name) && !EXCLUDED_METRIC_KEYS.has(name);
+}
+
+function metricDefinition(name) {
+  if (Object.hasOwn(METRICS, name)) return METRICS[name];
+  if (!isMetricKey(name)) return null;
+  return {
+    label: name.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/_/g, " "),
+    unit: null,
+    direction: "neutral", // Unknown metrics never receive a fabricated direction.
+  };
+}
+
 const DEFAULT_METRICS = Object.freeze({
   aimlab: ["accuracyPercent", "score", "hits", "averageReactionSeconds"],
   feet_targets: ["accuracyPercent", "targetsReached", "hits", "score"],
@@ -65,6 +84,15 @@ function numericalMetrics(metrics) {
       Number.isFinite(metrics.accuracyPercent) &&
       metrics.accuracyPercent >= 0 && metrics.accuracyPercent <= 100) {
     values.accuracyPercent = metrics.accuracyPercent;
+  }
+  // Unity may add extra scalar metrics in future releases. Preserve these
+  // as neutral measures rather than silently dropping real results, but never
+  // treat unknown numbers as proof of an improvement.
+  for (const [name, value] of Object.entries(metrics)) {
+    if (!Object.hasOwn(values, name) && !Object.hasOwn(METRICS, name) &&
+        isMetricKey(name) && typeof value === "number" && Number.isFinite(value)) {
+      values[name] = value;
+    }
   }
   return values;
 }
@@ -120,7 +148,7 @@ function athleteIdOf(session) {
 }
 
 function describeMetric(name, values) {
-  const definition = METRICS[name];
+  const definition = metricDefinition(name);
   return {
     key: name, label: definition.label, unit: definition.unit,
     direction: definition.direction,
@@ -196,6 +224,7 @@ function chooseMetric(type, sessions, requested) {
     Object.keys(sessionExerciseMetrics(s)[type]?.metrics || {})));
   return DEFAULT_METRICS[type].find(key => existing.has(key))
     || Object.keys(METRICS).find(key => existing.has(key))
+    || [...existing].find(isMetricKey)
     || null;
 }
 
@@ -247,7 +276,7 @@ function evolution(sessions, {
       const trimmed = data.slice(-limit);
       points = trimmed.map((item, i) => ({
         ...item,
-        ...improvement(i ? trimmed[i - 1].value : null, item.value, METRICS[metricName].direction),
+        ...improvement(i ? trimmed[i - 1].value : null, item.value, metricDefinition(metricName).direction),
       }));
     } else {
       const groups = new Map();
@@ -270,12 +299,12 @@ function evolution(sessions, {
         });
       points = points.map((point, i) => ({
         ...point,
-        ...improvement(i ? points[i - 1].value : null, point.value, METRICS[metricName].direction),
+        ...improvement(i ? points[i - 1].value : null, point.value, metricDefinition(metricName).direction),
       }));
     }
     series.push({
       exerciseType: type,
-      metric: { key: metricName, ...METRICS[metricName] },
+      metric: { key: metricName, ...metricDefinition(metricName) },
       points,
     });
   }
@@ -288,6 +317,7 @@ function evolution(sessions, {
 
 module.exports = {
   EXERCISE_LISTS, METRICS, DEFAULT_METRICS,
+  isMetricKey, metricDefinition,
   numericalMetrics, sessionExerciseMetrics, durationSeconds,
   summarySession, summarize, evolution,
 };
