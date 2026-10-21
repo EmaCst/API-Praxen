@@ -33,7 +33,7 @@ npm run admin:provision
 
 No compartas credenciales ni las guardes en el repositorio o Unity. En entornos compartidos es preferible proporcionar esas variables desde un almacén de secretos o de forma temporal; revócalas/elíminalas al terminar. Si el correo ya pertenece a un atleta, el comando **rechaza** elevarlo a administrador. Ejecutarlo con un correo administrativo existente actualiza su contraseña, sin crear duplicados.
 
-El token administrativo caduca por defecto en **2 horas** (`JWT_ADMIN_EXPIRES_IN`); el token de la app mantiene sus 12 horas configurables.
+El token administrativo caduca por defecto en **2 horas** (`JWT_ADMIN_EXPIRES_IN`); el token de la app mantiene sus 12 horas configurables. Para recuperar contraseñas del panel por email puede configurarse `ADMIN_PASSWORD_RESET_URL` (HTTPS obligatorio en producción). Sin esa URL, un administrador debe recuperar su acceso con el comando interno `admin:provision`; nunca recibe por correo el enlace `praxen://` destinado a la app.
 
 Se aplica la migración aditiva `002-roles.sql`: los usuarios anteriores reciben `role='athlete'`, sin borrar sesiones ni perfiles. No hay autoasignación de administradores.
 
