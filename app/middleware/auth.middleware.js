@@ -49,6 +49,15 @@ module.exports = async function authenticate(req, res, next) {
     if (isAdmin && (claims.aud !== "praxen-dashboard" || claims.athleteId !== undefined)) {
       return res.status(401).json({ message: "Se necesita iniciar sesión como administrador." });
     }
+    if (isAthlete) {
+      const athlete = await db.atletas.findOne({
+        where: { id: athleteId, userId },
+        attributes: ["id"],
+      });
+      if (!athlete) {
+        return res.status(401).json({ message: "El atleta ya no está asociado a esta cuenta." });
+      }
+    }
     req.auth = {
       userId,
       role,
