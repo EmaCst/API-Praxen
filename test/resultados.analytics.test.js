@@ -62,6 +62,15 @@ test("cada tipo de ejercicio mantiene sus métricas separadas", () => {
   assert.equal(metrics.aimlab.metrics.accuracyPercent, 50);
   assert.equal(metrics.running_direction_change.metrics.targetsReached, 5);
   assert.equal(metrics.aimlab.metrics.totalTravelledMeters, undefined);
+  const withSets = session("exercise", 1, "2026-01-01T08:00:00.000Z",
+    {hits:3, misses:1});
+  withSets.exercises[0].sets = 4;
+  withSets.exercises[0].setDurationSeconds = 60;
+  withSets.exercises[0].restDurationSeconds = 30;
+  const params = sessionExerciseMetrics(withSets).aimlab.metrics;
+  assert.equal(params.sets, 4);
+  assert.equal(params.setDurationSeconds, 60);
+  assert.equal(params.restDurationSeconds, 30);
   const latest = summarySession(rows[0]);
   assert.equal(latest.durationSeconds, 180);
   assert.equal(latest.sessionId, "s1");
