@@ -33,6 +33,8 @@ npm run admin:provision
 
 No compartas credenciales ni las guardes en el repositorio o Unity. En entornos compartidos es preferible proporcionar esas variables desde un almacén de secretos o de forma temporal; revócalas/elíminalas al terminar. Si el correo ya pertenece a un atleta, el comando **rechaza** elevarlo a administrador. Ejecutarlo con un correo administrativo existente actualiza su contraseña, sin crear duplicados.
 
+El token administrativo caduca por defecto en **2 horas** (`JWT_ADMIN_EXPIRES_IN`); el token de la app mantiene sus 12 horas configurables.
+
 Se aplica la migración aditiva `002-roles.sql`: los usuarios anteriores reciben `role='athlete'`, sin borrar sesiones ni perfiles. No hay autoasignación de administradores.
 
 ### Autenticación para el panel
@@ -179,7 +181,7 @@ Praxen guarda las sesiones en `training_sessions` con las tres listas JSONB orig
 
 Las métricas conocidas incluyen `hits`, `misses`, `score`, `targetsReached`, `averageReactionSeconds`, `totalTravelledMeters`, entre otras. La precisión se calcula como `hits / (hits + misses) * 100` únicamente si existen ambos contadores y hay al menos un intento. Los demás valores numéricos simples añadidos por futuras versiones de Unity se conservan con dirección `neutral`; no se presupone que subir o bajar implique una mejora.
 
-- **Promedio individual:** cada sesión cuenta una vez, incluso si se registraron varios resultados del mismo ejercicio en ella. Para esos registros se obtiene primero el promedio de la sesión.
+- **Promedio individual:** cada sesión cuenta una vez, incluso si se registraron varios resultados del mismo ejercicio en ella. Para esos registros se obtiene primero el promedio de la sesión; la precisión (`accuracyPercent`) pondera por el **número real de intentos** cuando hay contadores de aciertos y fallos en todos los registros, evitando que un set con un intento pese igual que uno con cien.
 - **Promedio global/federación:** primero se promedian las sesiones de cada atleta; después se promedian los atletas con el mismo peso. Evita que un deportista que entrenó 100 veces domine sobre otro que entrenó 5.
 - **Evolución global/federación:** el mismo promedio equitativo entre atletas se calcula dentro de cada período.
 - **Mejora:** se calcula respecto a la sesión/período anterior solo cuando está justificada la dirección (`higher`: aciertos, precisión; `lower`: fallos, reacción). Distancia recorrida y métricas desconocidas se clasifican como neutrales. Un `improvement` positivo significa una mejora en unidades de esa métrica.
