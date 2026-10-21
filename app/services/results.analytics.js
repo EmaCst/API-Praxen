@@ -21,6 +21,9 @@ const METRICS = Object.freeze({
   targetsHit: { label: "Objetivos acertados", unit: "objetivos", direction: "higher" },
   targetsMissed: { label: "Objetivos fallados", unit: "objetivos", direction: "lower" },
   attemptsCount: { label: "Intentos", unit: "intentos", direction: "neutral" },
+  sets: { label: "Sets", unit: "sets", direction: "neutral" },
+  setDurationSeconds: { label: "Duración de cada set", unit: "segundos", direction: "neutral" },
+  restDurationSeconds: { label: "Descanso entre sets", unit: "segundos", direction: "neutral" },
   averageReactionSeconds: { label: "Tiempo medio de reacción", unit: "segundos", direction: "lower" },
   averageReactionTimeSeconds: { label: "Tiempo medio de reacción", unit: "segundos", direction: "lower" },
   reactionTimeSeconds: { label: "Tiempo de reacción", unit: "segundos", direction: "lower" },
@@ -111,6 +114,12 @@ function sessionExerciseMetrics(session) {
     for (const entry of valid) {
       const raw = entry.metrics || {};
       const metrics = numericalMetrics(raw);
+      for (const name of ["sets", "setDurationSeconds", "restDurationSeconds"]) {
+        const value = entry[name];
+        if (typeof value === "number" && Number.isFinite(value) && value >= 0) {
+          metrics[name] = value;
+        }
+      }
       for (const [name, value] of Object.entries(metrics)) {
         (values[name] ||= []).push(value);
       }
