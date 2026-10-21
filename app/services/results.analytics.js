@@ -103,15 +103,30 @@ function sessionExerciseMetrics(session) {
   for (const [type, field] of Object.entries(EXERCISE_LISTS)) {
     const entries = Array.isArray(data[field]) ? data[field] : [];
     const values = {};
-    for (const entry of entries) {
-      if (!entry || entry.exerciseType !== type) continue;
-      const metrics = numericalMetrics(entry.metrics);
+    const valid = entries.filter(entry => entry?.exerciseType === type);
+    if (!valid.length) continue;
+    let totalHits = 0;
+    let totalMisses = 0;
+    let allHaveAttempts = true;
+    for (const entry of valid) {
+      const raw = entry.metrics || {};
+      const metrics = numericalMetrics(raw);
       for (const [name, value] of Object.entries(metrics)) {
         (values[name] ||= []).push(value);
       }
+      if (typeof raw.hits === "number" && Number.isFinite(raw.hits) && raw.hits >= 0 &&
+          typeof raw.misses === "number" && Number.isFinite(raw.misses) && raw.misses >= 0) {
+        totalHits += raw.hits;
+        totalMisses += raw.misses;
+      } else {
+        allHaveAttempts = false;
+      }
     }
-    const valid = entries.filter(entry => entry?.exerciseType === type);
-    if (!valid.length) continue;
+    // Accuracy is a ratio of attempts, not a mean of percentages: a set
+    // with 1 attempt must not outweigh a set with 100 attempts.
+    if (allHaveAttempts && totalHits + totalMisses > 0) {
+      values.accuracyPercent = [100 * totalHits / (totalHits + totalMisses)];
+    }
     result[type] = {
       results: valid.length,
       metrics: Object.fromEntries(
