@@ -83,6 +83,18 @@ Devuelve las sesiones de la cuenta autenticada con paginación.
 
 Devuelve una sesión propia por UUID; no revela si una sesión ajena existe.
 
+## Roles, permisos y estadísticas de entrenamiento
+
+Ahora las credenciales de la app y del panel administrativo utilizan una misma tabla `users`, con los roles `athlete` y `admin`. Los perfiles `athletes` y los resultados existentes se mantienen. El registro normal y Google crean únicamente atletas; **ningún cliente puede registrarse como administrador**.
+
+El administrador se crea exclusivamente mediante el comando interno `npm run admin:provision` y usa un JWT de audiencia `praxen-dashboard`. Los atletas conservan la audiencia `praxen-app`; la API comprueba el rol actual en PostgreSQL en cada petición y no confía en roles enviados por el cliente.
+
+**Resultados para la app:** `GET /api/resultados/me/{ultima,resumen,evolucion,sesiones,metricas}` (rutas reales sin las llaves), siempre limitados al atleta autenticado.
+
+**Resultados para el panel:** `GET /api/admin/resultados/{ultima,resumen,evolucion,sesiones,metricas}`, consultas de atletas y federaciones y resumen por federación. Los endpoints de resumen, evolución y última sesión permiten filtrar por `federacion`, `athleteId`, `exerciseType`, fechas y modo. También existe una comparación de todas las federaciones. Los datos históricos se calculan por ejercicio, con unidades y sentido de mejora explícitos.
+
+Consulta **[la documentación completa de roles, ejemplos de peticiones y respuestas, estadísticas y despliegue](docs/admin-results-api.md)**. La migración `002-roles.sql` es aditiva y preserva las cuentas previas; verifica primero en Neon y aprovisiona un administrador desde una terminal confiable. Las estadísticas se calculan con sesiones reales, no con datos ficticios, y requieren despliegue de esta rama.
+
 ## Google en Android
 
 La ruta `/api/auth/google` sirve para iniciar sesión con una cuenta Google normal. La app Android debe obtener el ID token usando el flujo Google Identity Services y enviarlo por HTTPS. Iniciar sesión con un perfil de Google Play Games es una integración distinta; requiere configurarla en Play Console y no se debe sustituir un flujo por el otro.

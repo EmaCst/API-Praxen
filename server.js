@@ -2,14 +2,15 @@ require("dotenv").config();
 
 const cors = require("cors");
 const express = require("express");
-const fs = require("node:fs");
-const path = require("node:path");
+const { runMigrations } = require("./app/db/run-migrations");
 const { rateLimit } = require("express-rate-limit");
 const db = require("./app/models");
 const athleteRoutes = require("./app/routes/atleta.routes.js");
 const sessionRoutes = require("./app/routes/sesion.routes.js");
 const authRoutes = require("./app/routes/auth.routes.js");
 const authenticate = require("./app/middleware/auth.middleware.js");
+const { PERMISSIONS, requirePermission } = require("./app/security/roles");
+const adminRoutes = require("./app/routes/admin.routes.js");
 
 const app = express();
 // Configura el número exacto de proxies de tu hosting (0 para ejecución directa).
@@ -36,6 +37,13 @@ app.use(
 );
 
 app.use(express.json({ limit: "1mb" }));
+// Results and authentication responses may contain personal information.
+// Never let an intermediary cache data across accounts.
+app.use("/api", (_req, res, next) => {
+  res.set("Cache-Control", "no-store, private, max-age=0");
+  res.set("Pragma", "no-cache");
+  next();
+});
 
 app.get("/", (req, res) => {
   res.json({ service: "API Praxen", status: "ok" });
@@ -50,9 +58,15 @@ app.get("/api/health", async (req, res) => {
   }
 });
 
-app.use("/api/auth", rateLimit({ windowMs: 15 * 60 * 1000, limit: 30, standardHeaders: "draft-7", legacyHeaders: false }), authRoutes);
-app.use("/api/atletas", authenticate, athleteRoutes);
+app.use("/api/auth", authRoutes);
+const resultLimit = rateLimit({
+  windowMs: 60 * 1000, limit: 60,
+  standardHeaders: "draft-7", legacyHeaders: false,
+});
+app.use("/api/atletas", authenticate, requirePermission(PERMISSIONS.RESULTS_OWN_READ), athleteRoutes);
 app.use("/api/sesiones", authenticate, sessionRoutes);
+app.use("/api/resultados/me", authenticate, requirePermission(PERMISSIONS.RESULTS_OWN_READ), resultLimit, require("./app/routes/resultados.routes.js"));
+app.use("/api/admin", authenticate, requirePermission(PERMISSIONS.RESULTS_ALL_READ), resultLimit, adminRoutes);
 
 app.use((req, res) => {
   res.status(404).json({ message: "Ruta no encontrada." });
@@ -78,10 +92,7 @@ app.use((error, req, res, next) => {
 async function startServer() {
   await db.sequelize.authenticate();
   await db.sequelize.sync();
-  const migration = fs.readFileSync(path.join(__dirname, "app/db/migrations/001-auth.sql"), "utf8");
-  for (const statement of migration.split(";").map((part) => part.trim()).filter(Boolean)) {
-    await db.sequelize.query(statement);
-  }
+  await runMigrations(db.sequelize);
 
   const port = Number(process.env.PORT) || 8080;
   return app.listen(port, () => {
