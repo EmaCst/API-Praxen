@@ -126,6 +126,23 @@ test("evolución por federación/global publica promedios mensuales entre atleta
   assert.equal(graph.series[0].points[1].sessions, 3);
 });
 
+test("métricas adicionales de Unity se conservan como neutrales", () => {
+  const metrics = numericalMetrics({
+    customCoordination: 8.2, sessionId: 12, customNested: [1, 2],
+  });
+  assert.equal(metrics.customCoordination, 8.2);
+  assert.equal(metrics.sessionId, undefined);
+  assert.equal(metrics.customNested, undefined);
+  const training = session("extra", 1, "2026-01-01T12:00:00.000Z", {hits: 3, misses: 1});
+  training.exercises[0].metrics.customCoordination = 8.2;
+  const graph = evolution([training], {
+    exerciseType: "aimlab", metric: "customCoordination",
+  });
+  assert.equal(graph.series[0].metric.direction, "neutral");
+  assert.equal(graph.series[0].points[0].value, 8.2);
+  assert.equal(graph.series[0].points[0].improved, undefined);
+});
+
 test("sin métricas registradas la serie queda vacía en vez de fabricar ceros", () => {
   assert.deepEqual(evolution(rows, {exerciseType:"feet_targets"}).series, []);
   assert.equal(summarize(rows, {exerciseType:"feet_targets"}).totalSessions, 0);
