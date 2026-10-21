@@ -171,12 +171,21 @@ exports.forgotPassword = async (req, res) => {
   }
   try {
     const user = await db.usuarios.findOne({ where: { email } });
-    if (user && user.passwordHash) {
+    // An admin account belongs to the web dashboard; never email a mobile
+    // deep-link that cannot be used there. If no dashboard reset URL is set,
+    // operators can rotate admin credentials with the trusted CLI.
+    const resetBase = user?.role === ROLES.ADMIN
+      ? process.env.ADMIN_PASSWORD_RESET_URL
+      : (process.env.PASSWORD_RESET_URL || "praxen://reset-password");
+    const safeAdminReset = user?.role !== ROLES.ADMIN ||
+      (typeof resetBase === "string" &&
+        (process.env.NODE_ENV !== "production" || resetBase.startsWith("https://")));
+    if (user && user.passwordHash && resetBase && safeAdminReset) {
       const resetToken = crypto.randomBytes(32).toString("base64url");
       user.resetTokenHash = crypto.createHash("sha256").update(resetToken).digest("hex");
       user.resetExpiresAt = new Date(Date.now() + 30 * 60 * 1000);
       await user.save();
-      const resetUrl = `${process.env.PASSWORD_RESET_URL || "praxen://reset-password"}?token=${encodeURIComponent(resetToken)}`;
+      const resetUrl = `${resetBase}?token=${encodeURIComponent(resetToken)}`;
       try {
         await sendResetEmail(user.email, resetUrl);
       } catch (mailError) {
