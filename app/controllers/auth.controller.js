@@ -4,6 +4,7 @@ const jwt = require("jsonwebtoken");
 const nodemailer = require("nodemailer");
 const { OAuth2Client } = require("google-auth-library");
 const db = require("../models");
+const { ROLES, permissionsFor } = require("../security/roles");
 const {
   normalizeEmail,
   validateRegistration,
@@ -15,19 +16,31 @@ const {
 const GENERIC_RESET_MESSAGE = "Si existe una cuenta con ese correo, recibirá instrucciones para cambiar la contraseña.";
 
 function safeUser(user) {
-  return { id: user.id, nombre: user.nombre, email: user.email };
+  return {
+    id: user.id, nombre: user.nombre, email: user.email,
+    role: user.role, permissions: permissionsFor(user.role),
+  };
 }
 
 function issueToken(user, athlete) {
   const secret = process.env.JWT_SECRET;
   if (!secret || secret.length < 32) throw new Error("JWT_SECRET debe tener al menos 32 caracteres.");
-  const token = jwt.sign({ athleteId: athlete.id }, secret, {
+  const isAdmin = user.role === ROLES.ADMIN;
+  if (!isAdmin && (user.role !== ROLES.ATHLETE || !athlete)) {
+    throw new Error("La cuenta no tiene un perfil de atleta válido.");
+  }
+  // Do NOT take a role from a signup request or trust a JWT role claim.
+  // Admin tokens cannot call athlete routes, and app tokens cannot call the dashboard.
+  const token = jwt.sign(isAdmin ? {} : { athleteId: athlete.id }, secret, {
     subject: String(user.id),
     expiresIn: process.env.JWT_EXPIRES_IN || "12h",
     issuer: "api-praxen",
-    audience: "praxen-app",
+    audience: isAdmin ? "praxen-dashboard" : "praxen-app",
   });
-  return { token, user: safeUser(user), atleta: { id: athlete.id, nombre: athlete.nombre, federacion: athlete.federacion } };
+  return {
+    token, user: safeUser(user),
+    atleta: athlete ? { id: athlete.id, nombre: athlete.nombre, federacion: athlete.federacion } : null,
+  };
 }
 
 function authResponse(res, user, athlete, status = 200) {
@@ -56,7 +69,9 @@ exports.register = async (req, res) => {
     if (existing) return res.status(409).json({ message: "Ya existe una cuenta con ese correo." });
     const passwordHash = await bcrypt.hash(req.body.password, 12);
     const created = await db.sequelize.transaction(async (transaction) => {
-      const user = await db.usuarios.create({ nombre: req.body.nombre.trim(), email, passwordHash }, { transaction });
+      const user = await db.usuarios.create({
+        nombre: req.body.nombre.trim(), email, passwordHash, role: ROLES.ATHLETE,
+      }, { transaction });
       const athlete = await db.atletas.create({ nombre: req.body.nombre.trim(), federacion: req.body.federacion.trim(), userId: user.id }, { transaction });
       return { user, athlete };
     });
@@ -75,8 +90,11 @@ exports.login = async (req, res) => {
     if (!user || !user.passwordHash || !(await bcrypt.compare(req.body.password, user.passwordHash))) {
       return res.status(401).json({ message: "Correo o contraseña incorrectos." });
     }
-    const athlete = await db.atletas.findOne({ where: { userId: user.id } });
-    if (!athlete) return res.status(500).json({ message: "La cuenta no tiene un perfil de atleta asociado." });
+    const athlete = user.role === ROLES.ADMIN ? null :
+      await db.atletas.findOne({ where: { userId: user.id } });
+    if (user.role !== ROLES.ADMIN && !athlete) {
+      return res.status(500).json({ message: "La cuenta no tiene un perfil de atleta asociado." });
+    }
     return authResponse(res, user, athlete);
   } catch (error) {
     console.error("Error al iniciar sesión:", error);
@@ -100,11 +118,17 @@ exports.googleLogin = async (req, res) => {
 
     const result = await db.sequelize.transaction(async (transaction) => {
       let user = await db.usuarios.findOne({ where: { googleSubject: claims.sub }, transaction });
+      if (user && user.role !== ROLES.ATHLETE) {
+        throw Object.assign(new Error("Las cuentas administrativas utilizan el inicio de sesión del panel."), { statusCode: 403 });
+      }
       if (user && user.email !== normalizeEmail(claims.email)) {
         throw Object.assign(new Error("La cuenta de Google no coincide."), { statusCode: 409 });
       }
       if (!user) {
         user = await db.usuarios.findOne({ where: { email: normalizeEmail(claims.email) }, transaction });
+        if (user && user.role !== ROLES.ATHLETE) {
+          throw Object.assign(new Error("Las cuentas administrativas no pueden vincularse desde la app."), { statusCode: 403 });
+        }
         if (user && user.googleSubject && user.googleSubject !== claims.sub) {
           throw Object.assign(new Error("El correo ya está vinculado a otra identidad."), { statusCode: 409 });
         }
@@ -113,6 +137,7 @@ exports.googleLogin = async (req, res) => {
             nombre: (claims.name || claims.given_name || claims.email).slice(0, 120),
             email: normalizeEmail(claims.email),
             googleSubject: claims.sub,
+            role: ROLES.ATHLETE,
           }, { transaction });
         } else {
           user.googleSubject = claims.sub;
@@ -215,5 +240,18 @@ exports.resetPassword = async (req, res) => {
   } catch (error) {
     console.error("Error al restablecer contraseña:", error);
     return res.status(500).json({ message: "No se pudo cambiar la contraseña." });
+  }
+};
+
+exports.me = async (req, res) => {
+  try {
+    const user = await db.usuarios.findByPk(req.auth.userId, {
+      attributes: ["id", "nombre", "email", "role"],
+    });
+    if (!user) return res.status(401).json({ message: "Cuenta no encontrada." });
+    return res.json({ user: safeUser(user), athleteId: req.auth.athleteId });
+  } catch (error) {
+    console.error("Error al obtener cuenta actual:", error);
+    return res.status(500).json({ message: "No se pudo consultar la cuenta." });
   }
 };
