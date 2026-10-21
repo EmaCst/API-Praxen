@@ -23,7 +23,10 @@ require.cache[modelPath] = { id: modelPath, filename: modelPath, loaded: true, e
       const rows = [...sessions.values()].filter(x => x.athleteId === where.athleteId).sort((a,b) => b.startedAt-a.startedAt);
       return {count: rows.length, rows: rows.slice(offset, offset+limit)};
     },
-  }, usuarios: {},
+  }, usuarios: {
+    findByPk: async (id) => Number.isInteger(id) && id > 0
+      ? { id, role: 'athlete' } : null,
+  },
 }};
 const {app} = require('../server');
 let server, base;
