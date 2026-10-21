@@ -231,6 +231,35 @@ test("listas y filtros requieren admin y son coherentes por federación", async 
   assert.equal(one.data.session.athleteId, 1);
 });
 
+test("la API no expone sesiones de otras federaciones ni permite audiencia incorrecta", async () => {
+  const restricted = await get(
+    "/api/admin/resultados/sesiones/" + sessions[0].sessionId +
+    "?federacion=Nataci%C3%B3n", adminToken());
+  assert.equal(restricted.status, 404);
+  const wrongAudience = jwt.sign({ role: "admin", athleteId: 1 }, process.env.JWT_SECRET, {
+    subject: "1", issuer: "api-praxen", audience: "praxen-dashboard", expiresIn: "1h",
+  });
+  assert.equal((await get("/api/admin/resultados/resumen", wrongAudience)).status, 401);
+});
+
+test("los filtros de fecha y ejercicio mantienen totales y paginación coherentes", async () => {
+  const date = await get(
+    "/api/admin/resultados/resumen?federacion=Atletismo&from=2026-02-01&to=2026-02-01",
+    adminToken());
+  assert.equal(date.status, 200);
+  assert.equal(date.data.summary.totalSessions, 1);
+  const listing = await get(
+    "/api/admin/resultados/sesiones?exerciseType=aimlab&limit=1&offset=1", adminToken());
+  assert.equal(listing.status, 200);
+  assert.equal(listing.data.total, 3);
+  assert.equal(listing.data.sesiones.length, 1);
+  const unrelated = await get(
+    "/api/admin/resultados/resumen?exerciseType=feet_targets", adminToken());
+  assert.equal(unrelated.status, 200);
+  assert.equal(unrelated.data.summary.totalSessions, 0);
+  assert.deepEqual(unrelated.data.summary.exercises, []);
+});
+
 test("filtros inválidos y consultas fuera de federación no revelan información", async () => {
   for (const query of [
     "?from=2026-02-31", "?from=2026-05-01&to=2026-04-30",
