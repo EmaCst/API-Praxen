@@ -25,8 +25,7 @@ function safeUser(user) {
 function issueToken(user, athlete) {
   const secret = process.env.JWT_SECRET;
   if (!secret || secret.length < 32) throw new Error("JWT_SECRET debe tener al menos 32 caracteres.");
-  if (user.isActive === false) throw new Error("La cuenta está desactivada.");
-  const isAdmin = user.role === ROLES.ADMIN || user.role === ROLES.SUPERADMIN;
+  const isAdmin = user.role === ROLES.ADMIN;
   if (!isAdmin && (user.role !== ROLES.ATHLETE || !athlete)) {
     throw new Error("La cuenta no tiene un perfil de atleta válido.");
   }
@@ -90,12 +89,12 @@ exports.login = async (req, res) => {
   if (!validateLogin(req.body)) return res.status(400).json({ message: "email y password son obligatorios." });
   try {
     const user = await db.usuarios.findOne({ where: { email: normalizeEmail(req.body.email) } });
-  if (!user || user.isActive === false || !user.passwordHash || !(await bcrypt.compare(req.body.password, user.passwordHash))) {
+    if (!user || !user.passwordHash || !(await bcrypt.compare(req.body.password, user.passwordHash))) {
       return res.status(401).json({ message: "Correo o contraseña incorrectos." });
     }
-    const athlete = [ROLES.ADMIN, ROLES.SUPERADMIN].includes(user.role) ? null :
+    const athlete = user.role === ROLES.ADMIN ? null :
       await db.atletas.findOne({ where: { userId: user.id } });
-    if (user.role === ROLES.ATHLETE && !athlete) {
+    if (user.role !== ROLES.ADMIN && !athlete) {
       return res.status(500).json({ message: "La cuenta no tiene un perfil de atleta asociado." });
     }
     return authResponse(res, user, athlete);
@@ -147,9 +146,6 @@ exports.googleLogin = async (req, res) => {
           await user.save({ transaction });
         }
       }
-      if (user.isActive === false) {
-        throw Object.assign(new Error("La cuenta está desactivada."), { statusCode: 403 });
-      }
       let athlete = await db.atletas.findOne({ where: { userId: user.id }, transaction });
       if (!athlete) {
         if (!validateFederation(req.body.federacion)) {
@@ -178,10 +174,10 @@ exports.forgotPassword = async (req, res) => {
     // An admin account belongs to the web dashboard; never email a mobile
     // deep-link that cannot be used there. If no dashboard reset URL is set,
     // operators can rotate admin credentials with the trusted CLI.
-    const resetBase = [ROLES.ADMIN, ROLES.SUPERADMIN].includes(user?.role)
+    const resetBase = user?.role === ROLES.ADMIN
       ? process.env.ADMIN_PASSWORD_RESET_URL
       : (process.env.PASSWORD_RESET_URL || "praxen://reset-password");
-    const safeAdminReset = ![ROLES.ADMIN, ROLES.SUPERADMIN].includes(user?.role) ||
+    const safeAdminReset = user?.role !== ROLES.ADMIN ||
       (typeof resetBase === "string" &&
         (process.env.NODE_ENV !== "production" || resetBase.startsWith("https://")));
     if (user && user.passwordHash && resetBase && safeAdminReset) {

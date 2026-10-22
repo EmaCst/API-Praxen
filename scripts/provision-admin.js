@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 "use strict";
 
-// Bootstrap or recover a superadmin, from a trusted terminal only.
+// Run only from a trusted shell: ADMIN_EMAIL=... ADMIN_NAME=...
+// ADMIN_PASSWORD=... npm run admin:provision
 // NEVER expose this operation as a public HTTP route.
 require("dotenv").config();
 const bcrypt = require("bcryptjs");
@@ -26,21 +27,17 @@ async function main() {
   await db.sequelize.transaction(async (transaction) => {
     let user = await db.usuarios.findOne({ where: { email }, transaction });
     if (user) {
-      if (![ROLES.ADMIN, ROLES.SUPERADMIN].includes(user.role)) {
-        throw new Error("Este correo ya pertenece a un atleta. Utiliza un correo administrativo independiente.");
+      if (user.role !== ROLES.ADMIN) {
+        throw new Error("Este correo ya pertenece a una cuenta de atleta. Utiliza un correo administrativo independiente.");
       }
-      await user.update({ nombre: name, passwordHash, role: ROLES.SUPERADMIN, isActive: true }, { transaction });
+      await user.update({ nombre: name, passwordHash }, { transaction });
     } else {
       user = await db.usuarios.create({
-        nombre: name, email, role: ROLES.SUPERADMIN, passwordHash, isActive: true,
+        nombre: name, email, role: ROLES.ADMIN, passwordHash,
       }, { transaction });
     }
-    await db.adminAudit.create({
-      actorUserId: user.id, targetUserId: user.id,
-      action: "superadmin_bootstrap", details: { source: "trusted_cli" },
-    }, { transaction });
   });
-  console.info("Cuenta superadministradora configurada:", email);
+  console.info("Cuenta administrativa configurada:", email);
 }
 
 main()
