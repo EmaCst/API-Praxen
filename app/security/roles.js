@@ -8,6 +8,7 @@
 const ROLES = Object.freeze({
   ATHLETE: "athlete",
   ADMIN: "admin",
+  SUPERADMIN: "superadmin",
 });
 
 const PERMISSIONS = Object.freeze({
@@ -18,6 +19,8 @@ const PERMISSIONS = Object.freeze({
   RESULTS_ATHLETE_READ: "results:athlete:read",
   ATHLETES_LIST: "athletes:list",
   FEDERATIONS_LIST: "federations:list",
+  ADMINS_MANAGE: "admins:manage",
+  ADMINS_AUDIT_READ: "admins:audit:read",
 });
 
 const ROLE_PERMISSIONS = Object.freeze({
@@ -31,6 +34,15 @@ const ROLE_PERMISSIONS = Object.freeze({
     PERMISSIONS.RESULTS_ATHLETE_READ,
     PERMISSIONS.ATHLETES_LIST,
     PERMISSIONS.FEDERATIONS_LIST,
+  ]),
+  [ROLES.SUPERADMIN]: Object.freeze([
+    PERMISSIONS.RESULTS_ALL_READ,
+    PERMISSIONS.RESULTS_FEDERATION_READ,
+    PERMISSIONS.RESULTS_ATHLETE_READ,
+    PERMISSIONS.ATHLETES_LIST,
+    PERMISSIONS.FEDERATIONS_LIST,
+    PERMISSIONS.ADMINS_MANAGE,
+    PERMISSIONS.ADMINS_AUDIT_READ,
   ]),
 });
 
