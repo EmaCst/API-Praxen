@@ -34,13 +34,13 @@ module.exports = async function authenticate(req, res, next) {
   }
 
   try {
-    const user = await db.usuarios.findByPk(userId, { attributes: ["id", "role"] });
+    const user = await db.usuarios.findByPk(userId, { attributes: ["id", "role", "isActive"] });
     const role = user?.role;
-    if (!role || !permissionsFor(role).length) {
+    if (!role || user.isActive === false || !permissionsFor(role).length) {
       return res.status(401).json({ message: "La cuenta ya no está autorizada." });
     }
     const isAthlete = role === ROLES.ATHLETE;
-    const isAdmin = role === ROLES.ADMIN;
+    const isAdmin = role === ROLES.ADMIN || role === ROLES.SUPERADMIN;
     const athleteId = Number(claims.athleteId);
     if (isAthlete && (claims.aud !== "praxen-app" ||
         !Number.isSafeInteger(athleteId) || athleteId < 1)) {
