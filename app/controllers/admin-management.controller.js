@@ -4,15 +4,15 @@ const bcrypt = require("bcryptjs");
 const { Op } = require("sequelize");
 const db = require("../models");
 const { ROLES } = require("../security/roles");
-const { normalizeEmail, validateNewPassword } = require("../utils/auth.validator");
+const { normalizeUsername, validateUsername, validateNewPassword } = require("../utils/auth.validator");
 
-const publicFields = ["id", "nombre", "email", "role", "isActive", "createdAt"];
-const safeAccount = a => ({ id:a.id, nombre:a.nombre, email:a.email, role:a.role,
+const publicFields = ["id", "nombre", "username", "role", "isActive", "createdAt"];
+const safeAccount = a => ({ id:a.id, nombre:a.nombre, username:a.username, role:a.role,
   isActive:a.isActive !== false, createdAt:a.createdAt });
 const sendError = (res,e) => {
   if(e.status) return res.status(e.status).json({ message:e.message });
   if(e.name === "SequelizeUniqueConstraintError" || e.parent?.code === "23505")
-    return res.status(409).json({ message:"El correo ya está registrado." });
+    return res.status(409).json({ message:"El nombre de usuario ya está ocupado." });
   console.error("Error en gestión de administradores:",e);
   return res.status(500).json({ message:"No se pudo completar la operación." });
 };
@@ -40,17 +40,16 @@ exports.create = async (req,res) => {
   if(!body||typeof body!=="object"||Array.isArray(body))
     return res.status(400).json({message:"Datos de administrador inválidos."});
   const nombre=typeof body.nombre==="string"?body.nombre.trim():"";
-  const email=normalizeEmail(body.email);
-  if(nombre.length<2||nombre.length>120||email.length>254||
-      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)||!validateNewPassword(body.password))
-    return res.status(400).json({message:"Se requiere nombre (2-120), correo válido y contraseña de 8-72 bytes."});
+  const username=normalizeUsername(body.username);
+  if(nombre.length<2||nombre.length>120||!validateUsername(username)||!validateNewPassword(body.password))
+    return res.status(400).json({message:"Se requiere nombre (2-120), usuario (3-32 caracteres) y contraseña de 8-72 bytes."});
   // No se acepta `role`, `isActive`, `permissions` ni IDs del cliente.
   try {
     const passwordHash=await bcrypt.hash(body.password,12);
     const user=await db.sequelize.transaction(async transaction => {
-      if(await db.usuarios.findOne({where:{email},transaction}))
-        throw Object.assign(new Error("El correo ya está registrado."),{status:409});
-      const created=await db.usuarios.create({nombre,email,passwordHash,role:ROLES.ADMIN,isActive:true},{transaction});
+      if(await db.usuarios.findOne({where:{username},transaction}))
+        throw Object.assign(new Error("El nombre de usuario ya está ocupado."),{status:409});
+      const created=await db.usuarios.create({nombre,username,passwordHash,role:ROLES.ADMIN,isActive:true},{transaction});
       await db.adminAudit.create({actorUserId:req.auth.userId,targetUserId:created.id,
         action:"admin_created",details:{role:ROLES.ADMIN}}, {transaction});
       return created;

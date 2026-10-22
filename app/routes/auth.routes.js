@@ -10,9 +10,6 @@ const authLimit = rateLimit({
 const router = express.Router();
 router.post("/register", authLimit, controller.register);
 router.post("/login", authLimit, controller.login);
-router.post("/google", authLimit, controller.googleLogin);
-router.post("/forgot-password", authLimit, controller.forgotPassword);
-router.post("/reset-password", authLimit, controller.resetPassword);
 router.get("/me", authenticate, controller.me);
 
 module.exports = router;

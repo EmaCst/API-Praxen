@@ -15,29 +15,20 @@ Las capacidades se determinan en `app/security/roles.js`. Un `admin` dispone de 
 **Seguridad:**
 - Cada petición valida firma, emisor y audiencia del JWT, y vuelve a leer el **rol actual desde PostgreSQL**. Un JWT antiguo no permite conservar derechos administrativos tras una revocación.
 - No se confía en un `role`, `permissions` ni `athleteId` enviado por el frontend.
-- `POST /api/auth/register` y el registro con Google solo crean atletas, nunca administradores.
-- Los administradores inician sesión por correo y contraseña; Google no puede vincularse desde la app a una cuenta administrativa.
+- `POST /api/auth/register` solo crea atletas, nunca administradores.
+- Todos inician sesión exclusivamente con **nombre de usuario y contraseña**.
 - Los tokens del panel no son válidos para rutas exclusivas de atletas y viceversa.
 - Los usuarios atletas solo pueden ver sus sesiones. Para los resultados propios el servidor obtiene su `athleteId` del JWT verificado y comprueba que siga perteneciendo a su cuenta.
 - No existe un endpoint público para crear, promover o elevar administradores.
 
 ### Crear la primera cuenta administrativa
 
-El comando confiable ahora configura una cuenta **`superadmin`**. Si ya existía un
-`admin` con ese correo, volver a ejecutarlo desde un entorno confiable lo
-convierte explícitamente en `superadmin`, actualiza la contraseña y reactiva
-la cuenta. No modifica otras cuentas. El bootstrap queda auditado.
-
-Tras desplegar las migraciones, desde una **terminal confiable del servidor** (o una ejecución manual restringida del hosting):
-
-```bash
-ADMIN_EMAIL=directora@example.com \
-ADMIN_NAME="Administración Praxen" \
-ADMIN_PASSWORD="una-contraseña-segura" \
-npm run admin:provision
-```
-
-No compartas credenciales ni las guardes en el repositorio o Unity. En entornos compartidos es preferible proporcionar esas variables desde un almacén de secretos o de forma temporal; revócalas/elíminalas al terminar. Si el correo ya pertenece a un atleta, el comando **rechaza** elevarlo a administrador. Ejecutarlo con un correo administrativo existente actualiza su contraseña, sin crear duplicados.
+En una base de datos nueva, la primera cuenta `superadmin` se configura de manera
+controlada en Neon, en la tabla `users`. Debe incluir `nombre`, un `username`
+único (3 a 32 caracteres), `password_hash` **bcrypt** (no texto en claro),
+`role='superadmin'` e `is_active=true`. `id` y `created_at` usan sus valores
+predeterminados. No hace falta crear un perfil en `athletes` para ese usuario.
+No hay endpoint público ni comando de aprovisionamiento automático.
 
 ### Gestión segura desde el panel
 
@@ -50,11 +41,11 @@ Con un JWT de `superadmin` y el permiso `admins:manage`:
 | PATCH | `/api/admin/administradores/:userId/estado` | `{"isActive":false}` o `true` |
 | GET | `/api/admin/administradores/auditoria?limit=50&offset=0` | Registro de acciones |
 
-`POST` admite `nombre`, `email` y `password` (8–72 bytes UTF-8), pero ignora
+`POST` admite `nombre`, `username` y `password` (8–72 bytes UTF-8), pero ignora
 cualquier rol o permiso enviado por el cliente. No se permite crear o modificar
 superadministradores desde la web, desactivar la propia cuenta ni modificar a
-otro superadministrador. La única vía de bootstrap o recuperación de
-superadministradores es la CLI restringida. Los tokens de cuentas desactivadas
+otro superadministrador. El alta inicial o recuperación de una cuenta
+superadministradora requiere un cambio autorizado en la base de datos. Los tokens de cuentas desactivadas
 se rechazan inmediatamente en middleware, incluso si no han caducado.
 
 Las transacciones escriben la cuenta y su auditoría conjuntamente en
@@ -63,13 +54,13 @@ contraseñas ni hashes. El endpoint de auditoría requiere `admins:audit:read`.
 La migración aditiva `003-superadmins.sql` incorpora `users.is_active` y la
 tabla de auditoría, sin promover automáticamente ninguna cuenta.
 
-El token administrativo caduca por defecto en **2 horas** (`JWT_ADMIN_EXPIRES_IN`); el token de la app mantiene sus 12 horas configurables. Para recuperar contraseñas del panel por email puede configurarse `ADMIN_PASSWORD_RESET_URL` (HTTPS obligatorio en producción). Sin esa URL, un administrador debe recuperar su acceso con el comando interno `admin:provision`; nunca recibe por correo el enlace `praxen://` destinado a la app.
+El token administrativo caduca por defecto en **2 horas** (`JWT_ADMIN_EXPIRES_IN`); el token de la app mantiene sus 12 horas configurables. No existen rutas de recuperación automática ni envío de mensajes; una recuperación debe gestionarse de forma autorizada por un administrador de la base de datos.
 
 Se aplica la migración aditiva `002-roles.sql`: los usuarios anteriores reciben `role='athlete'`, sin borrar sesiones ni perfiles. No hay autoasignación de administradores.
 
 ### Autenticación para el panel
 
-`POST /api/auth/login` con `{ "email": "...", "password": "..." }` devuelve para un administrador:
+`POST /api/auth/login` con `{ "username": "directora", "password": "..." }` devuelve para un administrador:
 
 ```json
 {
@@ -77,7 +68,7 @@ Se aplica la migración aditiva `002-roles.sql`: los usuarios anteriores reciben
   "user": {
     "id": 10,
     "nombre": "Administración Praxen",
-    "email": "directora@example.com",
+    "username": "directora",
     "role": "admin",
     "permissions": [
       "results:all:read",

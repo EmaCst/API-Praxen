@@ -1,5 +1,5 @@
 -- Safe additive migration: existing accounts remain athletes.
--- Only an internal provisioning command may create/promote administrators.
+-- Public registration cannot create/promote administrators.
 ALTER TABLE users ADD COLUMN IF NOT EXISTS role VARCHAR(24) NOT NULL DEFAULT 'athlete';
 
 CREATE INDEX IF NOT EXISTS users_role_idx ON users(role);
