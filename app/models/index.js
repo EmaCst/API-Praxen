@@ -20,6 +20,7 @@ db.sequelize = sequelize;
 db.atletas = require("./atleta.model.js")(sequelize, Sequelize.DataTypes);
 db.sesiones = require("./sesion.model.js")(sequelize, Sequelize.DataTypes);
 db.usuarios = require("./usuario.model.js")(sequelize, Sequelize.DataTypes);
+db.adminAudit = require("./admin-audit.model.js")(sequelize, Sequelize.DataTypes);
 
 db.usuarios.hasOne(db.atletas, {
   foreignKey: "userId",
