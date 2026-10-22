@@ -1,5 +1,9 @@
-function normalizeEmail(email) {
-  return typeof email === "string" ? email.trim().toLowerCase() : "";
+function normalizeUsername(username) {
+  return typeof username === "string" ? username.trim().toLowerCase() : "";
+}
+
+function validateUsername(username) {
+  return /^[a-z0-9][a-z0-9._-]{2,31}$/.test(normalizeUsername(username));
 }
 
 function validateRegistration(body) {
@@ -10,8 +14,8 @@ function validateRegistration(body) {
   if (typeof body.nombre !== "string" || body.nombre.trim().length < 2 || body.nombre.trim().length > 120) {
     errors.push("nombre debe tener entre 2 y 120 caracteres.");
   }
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizeEmail(body.email)) || normalizeEmail(body.email).length > 254) {
-    errors.push("email debe ser una dirección válida.");
+  if (!validateUsername(body.username)) {
+    errors.push("username debe contener entre 3 y 32 caracteres: letras, números, punto, guion o guion bajo.");
   }
   if (!validateFederation(body.federacion)) {
     errors.push("federacion debe tener entre 2 y 120 caracteres.");
@@ -24,7 +28,7 @@ function validateRegistration(body) {
 
 function validateLogin(body) {
   return Boolean(body && typeof body === "object" && !Array.isArray(body) &&
-    normalizeEmail(body.email) && typeof body.password === "string" && body.password.length > 0);
+    validateUsername(body.username) && typeof body.password === "string" && body.password.length > 0);
 }
 
 function validateNewPassword(password) {
@@ -35,4 +39,4 @@ function validateFederation(value) {
   return typeof value === "string" && value.trim().length >= 2 && value.trim().length <= 120;
 }
 
-module.exports = { normalizeEmail, validateRegistration, validateLogin, validateNewPassword, validateFederation };
+module.exports = { normalizeUsername, validateUsername, validateRegistration, validateLogin, validateNewPassword, validateFederation };

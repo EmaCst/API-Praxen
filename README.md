@@ -9,16 +9,13 @@ API REST para cuentas de deportistas y resultados de ejercicios de la app Unity 
 3. Copia `.env.example` como `.env` y configura `DATABASE_URL` y un `JWT_SECRET` aleatorio de al menos 32 caracteres.
 4. Ejecuta `npm start`.
 
-Al iniciar, la API comprueba la conexión, crea las tablas que falten y aplica la migración compatible con los atletas ya creados. No usa sincronización destructiva. En producción configura también SMTP y el cliente OAuth de Google.
+Al iniciar, la API comprueba la conexión, crea las tablas que falten y aplica las migraciones. No borra datos ni tablas existentes automáticamente. **Una base nueva** se crea con `users.username`, `users.password_hash`, `users.role` y `users.is_active`, sin columnas de correo ni proveedores externos de autenticación.
 
 ## Variables de entorno
 
 - `DATABASE_URL`: URL de PostgreSQL/Neon. Usa la URL con pooler para el despliegue.
 - `JWT_SECRET`: secreto privado de 32 caracteres o más; no lo incluyas en Unity ni en Git.
 - `JWT_EXPIRES_IN`: duración del token (por defecto `12h`).
-- `GOOGLE_CLIENT_IDS`: client IDs OAuth permitidos, separados por comas. El servidor verifica los ID tokens que envía la app.
-- `PASSWORD_RESET_URL`: deep link que abre la pantalla de cambio de contraseña en Praxen.
-- `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM`: servidor de correo para enviar enlaces de recuperación.
 - `PORT`: puerto HTTP (por defecto 8080).
 - `CORS_ORIGINS`: orígenes web permitidos separados por comas; Unity nativa normalmente no envía `Origin`.
 - `DB_POOL_MAX`: máximo de conexiones PostgreSQL por proceso (por defecto 5).
@@ -27,29 +24,17 @@ Al iniciar, la API comprueba la conexión, crea las tablas que falten y aplica l
 
 ## Autenticación
 
-Todas las rutas de `/api/atletas` y `/api/sesiones` requieren `Authorization: Bearer <token>`. Los tokens los emite la API después de validar correo/contraseña o un ID token de Google. El `athleteId` enviado dentro de una sesión se ignora: el servidor la guarda asociada al atleta autenticado.
+Todas las rutas de `/api/atletas` y `/api/sesiones` requieren autenticación. Los tokens los emite la API después de validar **usuario y contraseña**; el cliente los maneja internamente. El `athleteId` enviado dentro de una sesión se ignora: el servidor la guarda asociada al atleta autenticado.
 
 ### POST `/api/auth/register`
 
-Entrada: `{ "nombre": "Ana Pérez", "federacion": "Atletismo", "email": "ana@example.com", "password": "una-clave-segura" }`.
+Entrada: `{ "nombre": "Ana Pérez", "federacion": "Atletismo", "username": "ana_123", "password": "una-clave-segura" }`.
 
 Crea una cuenta y su perfil de atleta en una transacción, cifra la contraseña con bcrypt y devuelve `token`, `user` y `atleta`.
 
 ### POST `/api/auth/login`
 
-Entrada: `{ "email": "ana@example.com", "password": "una-clave-segura" }`. Devuelve un token Bearer y los datos básicos de la cuenta.
-
-### POST `/api/auth/google`
-
-Entrada en el primer registro: `{ "idToken": "<Google ID token>", "federacion": "Atletismo" }`. En inicios posteriores basta el ID token. La federación no se obtiene del correo Google. La API verifica firma, audiencia, emisor, caducidad y correo verificado con Google, y luego emite su propio token. Requiere `GOOGLE_CLIENT_IDS` con los client IDs de OAuth configurados para la app.
-
-### POST `/api/auth/forgot-password`
-
-Entrada: `{ "email": "ana@example.com" }`. Responde con el mismo mensaje tanto si existe la cuenta como si no. Envía un enlace de un solo uso que caduca en 30 minutos. En desarrollo, si no hay SMTP, el enlace se escribe en la consola del servidor; en producción configura un proveedor SMTP.
-
-### POST `/api/auth/reset-password`
-
-Entrada: `{ "token": "<token del enlace>", "newPassword": "otra-clave-segura" }`. Al aceptar el cambio, el token queda invalidado.
+Entrada: `{ "username": "ana_123", "password": "una-clave-segura" }`. Devuelve un token de sesión y los datos básicos de la cuenta.
 
 Las rutas de autenticación tienen límite de solicitudes por IP. Las contraseñas no se guardan en claro.
 
@@ -85,19 +70,15 @@ Devuelve una sesión propia por UUID; no revela si una sesión ajena existe.
 
 ## Roles, permisos y estadísticas de entrenamiento
 
-Ahora las credenciales de la app y del panel administrativo utilizan una misma tabla `users`, con los roles `athlete` y `admin`. Los perfiles `athletes` y los resultados existentes se mantienen. El registro normal y Google crean únicamente atletas; **ningún cliente puede registrarse como administrador**.
+Las credenciales de la app y del panel administrativo utilizan una misma tabla `users`, con los roles `athlete`, `admin` y `superadmin`. El registro público crea únicamente atletas; **ningún cliente puede registrarse como administrador**.
 
-El administrador se crea exclusivamente mediante el comando interno `npm run admin:provision` y usa un JWT de audiencia `praxen-dashboard`. Los atletas conservan la audiencia `praxen-app`; la API comprueba el rol actual en PostgreSQL en cada petición y no confía en roles enviados por el cliente.
+El primer superadministrador debe crearse de forma controlada en PostgreSQL con una contraseña previamente cifrada con bcrypt; después crea otros administradores desde el panel. El servidor comprueba el rol actual en PostgreSQL en cada petición y no confía en roles enviados por el cliente.
 
 **Resultados para la app:** `GET /api/resultados/me/{ultima,resumen,evolucion,sesiones,metricas}` (rutas reales sin las llaves), siempre limitados al atleta autenticado.
 
 **Resultados para el panel:** `GET /api/admin/resultados/{ultima,resumen,evolucion,sesiones,metricas}`, consultas de atletas y federaciones y resumen por federación. Los endpoints de resumen, evolución y última sesión permiten filtrar por `federacion`, `athleteId`, `exerciseType`, fechas y modo. También existe una comparación de todas las federaciones. Los datos históricos se calculan por ejercicio, con unidades y sentido de mejora explícitos.
 
-Consulta **[la documentación completa de roles, ejemplos de peticiones y respuestas, estadísticas y despliegue](docs/admin-results-api.md)**. La migración `002-roles.sql` es aditiva y preserva las cuentas previas; verifica primero en Neon y aprovisiona un administrador desde una terminal confiable. Las estadísticas se calculan con sesiones reales, no con datos ficticios, y requieren despliegue de esta rama.
-
-## Google en Android
-
-La ruta `/api/auth/google` sirve para iniciar sesión con una cuenta Google normal. La app Android debe obtener el ID token usando el flujo Google Identity Services y enviarlo por HTTPS. Iniciar sesión con un perfil de Google Play Games es una integración distinta; requiere configurarla en Play Console y no se debe sustituir un flujo por el otro.
+Consulta **[la documentación completa de roles, ejemplos de peticiones y respuestas, estadísticas y despliegue](docs/admin-results-api.md)**. Las migraciones de esquema son aditivas para bases existentes; una base nueva se genera directamente con nombres de usuario. Las estadísticas se calculan con sesiones reales, no con datos ficticios.
 
 ## Pruebas
 
@@ -110,11 +91,11 @@ Ejecuta `npm test`. Las pruebas de validación no necesitan una base de datos Ne
 2. Despliega este repositorio con Node 22, `npm ci --omit=dev` y `npm start`, o con el Dockerfile incluido. Configura `NODE_ENV=production`, `DB_SSL=true` y un `JWT_SECRET` aleatorio de al menos 32 caracteres. Genera uno con `node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"`.
 3. El hosting debe proporcionar HTTPS y `PORT`. Si termina TLS detrás de un proxy, establece `TRUST_PROXY_HOPS` al número de proxies confiables del proveedor. Por defecto es 0.
 4. Comprueba `GET https://TU-API/api/health`: responde 200 y `database: "ok"` solo si PostgreSQL responde. Si falla, devuelve 503 sin exponer credenciales.
-5. En Praxen abre **Cuenta y nube**, indica `https://TU-API` (sin `/api`), registra nombre, federación, correo y contraseña, o inicia sesión. Entrena estando autenticado.
+5. En Praxen abre **Cuenta y nube**, indica `https://TU-API` (sin `/api`) e inicia sesión con usuario y contraseña. **La interfaz actual de Unity debe adaptarse a `username`**; no es compatible con el contrato nuevo si todavía envía `email`.
 6. Al terminar se envía `POST /api/sesiones` con `Authorization: Bearer TOKEN`. Los resultados incluyen los tres tipos de ejercicios y conservan sets, duración, descanso, métricas e intentos dentro de cada resultado.
 
 El mismo UUID y contenido devuelve 200 con `created: false`; si el UUID ya contiene resultados diferentes devuelve 409 sin sobrescribirlos. `athleteId` siempre procede del token. `GET /api/sesiones?limit=20&offset=0` y `GET /api/sesiones/:sessionId` devuelven únicamente los resultados del usuario autenticado.
 
 La app conserva pendientes en el teléfono y reintenta con esperas de hasta 120 segundos. Los pendientes quedan vinculados al servidor y atleta originales. Una sesión de invitado se conserva localmente y no se atribuye automáticamente a otra cuenta. El token solo vive en memoria: después de reiniciar o caducar hay que iniciar sesión de nuevo. Los errores permanentes (400, 403, 409, 413) conservan el archivo para diagnóstico sin reintentos continuos.
 
-`npm test` ejecuta validadores y pruebas HTTP de autenticación, aislamiento entre cuentas, persistencia simulada, idempotencia, consulta y fallos de DB. Estas pruebas no sustituyen la comprobación con Neon real. GitHub Actions ejecuta las mismas pruebas en cada push y PR. Para recuperación de contraseña y Google configura además SMTP y `GOOGLE_CLIENT_IDS` como se describe arriba; el panel básico de Unity añadido para esta integración usa correo y contraseña.
+`npm test` ejecuta validadores y pruebas HTTP de autenticación, aislamiento entre cuentas, persistencia simulada, idempotencia, consulta y fallos de DB. Estas pruebas no sustituyen la comprobación con Neon real. GitHub Actions ejecuta las mismas pruebas en cada push y PR.

@@ -7,13 +7,12 @@ const bcrypt = require("bcryptjs");
 const { Op } = require("sequelize");
 
 process.env.JWT_SECRET = "praxen-results-test-secret-at-least-32-characters";
-process.env.GOOGLE_CLIENT_IDS = "";
 
 const accounts = new Map([
-  [1, { id: 1, nombre: "Ana", email: "ana@example.com", role: "athlete", passwordHash: null }],
-  [2, { id: 2, nombre: "Beto", email: "beto@example.com", role: "athlete", passwordHash: null }],
-  [3, { id: 3, nombre: "Carla", email: "carla@example.com", role: "athlete", passwordHash: null }],
-  [10, { id: 10, nombre: "Directora", email: "admin@example.com", role: "admin", passwordHash: null }],
+  [1, { id: 1, nombre: "Ana", username: "ana", role: "athlete", passwordHash: null }],
+  [2, { id: 2, nombre: "Beto", username: "beto", role: "athlete", passwordHash: null }],
+  [3, { id: 3, nombre: "Carla", username: "carla", role: "athlete", passwordHash: null }],
+  [10, { id: 10, nombre: "Directora", username: "directora", role: "admin", passwordHash: null }],
 ]);
 const athletes = [
   { id: 1, userId: 1, nombre: "Ana", federacion: "Atletismo" },
@@ -72,7 +71,7 @@ require.cache[modelPath] = {
     },
     usuarios: {
       findByPk: async id => accounts.get(id) || null,
-      findOne: async ({where}) => [...accounts.values()].find(u => u.email === where.email) || null,
+      findOne: async ({where}) => [...accounts.values()].find(u => u.username === where.username) || null,
       create: async (body) => {
         const user = { ...body, id: 20 };
         accounts.set(user.id, user);
@@ -286,7 +285,7 @@ test("token administrativo deja de servir al revocar su rol en PostgreSQL", asyn
 test("login distingue público app frente a panel administrativo", async () => {
   const response = await fetch(base + "/api/auth/login", {
     method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({email: "admin@example.com", password: "adminSecret123"}),
+    body: JSON.stringify({username: "directora", password: "adminSecret123"}),
   });
   assert.equal(response.status, 200);
   const data = await response.json();
@@ -303,7 +302,7 @@ test("registro público nunca permite que el cliente se asigne permisos admin", 
   const response = await fetch(base + "/api/auth/register", {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      nombre:"Nuevo atleta", email:"new@example.com",
+      nombre:"Nuevo atleta", username:"nuevoatleta",
       federacion:"Atletismo", password:"safe-password123",
       role:"admin", permissions:["results:all:read"],
     }),
