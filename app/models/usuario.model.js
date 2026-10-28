@@ -12,6 +12,8 @@ module.exports = (sequelize, DataTypes) => {
         validate: { isIn: [["athlete", "admin", "superadmin"]] },
       },
       isActive: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true, field: "is_active" },
+      tokenVersion: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0, field: "token_version" },
+      mustChangePassword: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false, field: "must_change_password" },
       passwordHash: { type: DataTypes.STRING(100), allowNull: false, field: "password_hash" },
       createdAt: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW, field: "created_at" },
     },
