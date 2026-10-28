@@ -26,7 +26,7 @@ async function queryContext(req, admin, { list = false } = {}) {
   if (admin) {
     authorizeAdminAction(req, scope.type === "athlete"
       ? PERMISSIONS.RESULTS_ATHLETE_READ
-      : scope.type === "federation"
+      : (scope.type === "federation" || scope.type === "group")
         ? PERMISSIONS.RESULTS_FEDERATION_READ
         : PERMISSIONS.RESULTS_ALL_READ);
   }
@@ -37,6 +37,7 @@ function payloadFilters(filters) {
   return {
     exerciseType: filters.exerciseType, metric: filters.metric,
     mode: filters.mode, period: filters.period,
+    groupId:filters.groupId||null,
     from: filters.from ? filters.from.toISOString().slice(0, 10) : null,
     to: filters.to ? filters.to.toISOString().slice(0, 10) : null,
   };
@@ -144,6 +145,7 @@ admin.athletes = async (req, res) => {
     const filters = parseFilters(req.query, { admin: true, list: true });
     const whereFilter = {};
     if (filters.federation) whereFilter.federacion = filters.federation;
+    if(filters.groupId)whereFilter.userId={[Op.in]:db.sequelize.literal("(SELECT user_id FROM user_groups WHERE group_id = "+Number(filters.groupId)+")")};
     if (filters.athleteId) whereFilter.id = filters.athleteId;
     if (req.query.search !== undefined) {
       if (typeof req.query.search !== "string" ||
