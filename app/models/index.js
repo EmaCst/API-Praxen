@@ -21,6 +21,8 @@ db.atletas = require("./atleta.model.js")(sequelize, Sequelize.DataTypes);
 db.sesiones = require("./sesion.model.js")(sequelize, Sequelize.DataTypes);
 db.usuarios = require("./usuario.model.js")(sequelize, Sequelize.DataTypes);
 db.adminAudit = require("./admin-audit.model.js")(sequelize, Sequelize.DataTypes);
+db.groups = require("./group.model.js")(sequelize, Sequelize.DataTypes);
+db.userGroups = require("./user-group.model.js")(sequelize, Sequelize.DataTypes);
 
 db.usuarios.hasOne(db.atletas, {
   foreignKey: "userId",
@@ -48,4 +50,6 @@ db.sesiones.belongsTo(db.atletas, {
   onDelete: "RESTRICT",
 });
 
+db.usuarios.belongsToMany(db.groups,{through:db.userGroups,foreignKey:"userId",otherKey:"groupId",as:"grupos"});
+db.groups.belongsToMany(db.usuarios,{through:db.userGroups,foreignKey:"groupId",otherKey:"userId",as:"usuarios"});
 module.exports = db;
