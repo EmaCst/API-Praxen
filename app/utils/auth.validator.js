@@ -17,9 +17,7 @@ function validateRegistration(body) {
   if (!validateUsername(body.username)) {
     errors.push("username debe contener entre 3 y 32 caracteres: letras, números, punto, guion o guion bajo.");
   }
-  if (!validateFederation(body.federacion)) {
-    errors.push("federacion debe tener entre 2 y 120 caracteres.");
-  }
+  
   if (!validateNewPassword(body.password)) {
     errors.push("password debe tener al menos 8 caracteres y no superar 72 bytes UTF-8.");
   }
