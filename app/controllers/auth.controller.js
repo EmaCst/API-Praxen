@@ -4,12 +4,12 @@ const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const db = require("../models");
 const { ROLES, permissionsFor } = require("../security/roles");
-const { normalizeUsername, validateRegistration, validateLogin } = require("../utils/auth.validator");
+const { normalizeUsername, validateRegistration, validateLogin, validateNewPassword } = require("../utils/auth.validator");
 
 function safeUser(user) {
   return {
     id: user.id, nombre: user.nombre, username: user.username,
-    role: user.role, permissions: permissionsFor(user.role),
+    role: user.role, permissions: permissionsFor(user.role), mustChangePassword:user.mustChangePassword===true,
   };
 }
 
@@ -20,7 +20,7 @@ function issueToken(user, athlete) {
   const isAdmin = [ROLES.ADMIN, ROLES.SUPERADMIN].includes(user.role);
   if (!isAdmin && (user.role !== ROLES.ATHLETE || !athlete))
     throw new Error("La cuenta no tiene un perfil de atleta válido.");
-  const token = jwt.sign(isAdmin ? {} : { athleteId: athlete.id }, secret, {
+  const token = jwt.sign(isAdmin ? {tv:user.tokenVersion||0} : { athleteId: athlete.id,tv:user.tokenVersion||0 }, secret, {
     subject: String(user.id),
     expiresIn: isAdmin ? (process.env.JWT_ADMIN_EXPIRES_IN || "2h") : (process.env.JWT_EXPIRES_IN || "12h"),
     issuer: "api-praxen", audience: isAdmin ? "praxen-dashboard" : "praxen-app",
@@ -60,7 +60,7 @@ exports.register = async (req, res) => {
         nombre: req.body.nombre.trim(), username, passwordHash, role: ROLES.ATHLETE,
       }, { transaction });
       const athlete = await db.atletas.create({
-        nombre: req.body.nombre.trim(), federacion: req.body.federacion.trim(), userId: user.id,
+        nombre: req.body.nombre.trim(), federacion: "Natación", userId: user.id,
       }, { transaction });
       return { user, athlete };
     });
@@ -92,10 +92,22 @@ exports.login = async (req, res) => {
   }
 };
 
+exports.changePassword = async (req,res)=>{
+ const currentPassword=req.body?.currentPassword,newPassword=req.body?.newPassword;
+ if(typeof currentPassword!=="string"||!validateNewPassword(newPassword)||newPassword===currentPassword||newPassword==="praxen01")return res.status(400).json({message:"Indica tu contraseña actual y una contraseña nueva válida y distinta."});
+ try{
+  const account=await db.usuarios.findByPk(req.auth.userId);
+  if(!account||!(await bcrypt.compare(currentPassword,account.passwordHash)))return res.status(403).json({message:"La contraseña actual es incorrecta."});
+  const passwordHash=await bcrypt.hash(newPassword,12);
+  await db.usuarios.update({passwordHash,mustChangePassword:false,tokenVersion:db.sequelize.literal("token_version + 1")},{where:{id:account.id,passwordHash:account.passwordHash}});
+  return res.json({message:"Contraseña actualizada. Inicia sesión nuevamente."});
+ }catch(error){console.error("Error al cambiar contraseña:",error);return res.status(500).json({message:"No se pudo cambiar la contraseña."});}
+};
+
 exports.me = async (req, res) => {
   try {
     const user = await db.usuarios.findByPk(req.auth.userId, {
-      attributes: ["id", "nombre", "username", "role"],
+      attributes: ["id", "nombre", "username", "role", "mustChangePassword"],
     });
     if (!user) return res.status(401).json({ message: "Cuenta no encontrada." });
     return res.json({ user: safeUser(user), athleteId: req.auth.athleteId });
