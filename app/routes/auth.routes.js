@@ -11,5 +11,6 @@ const router = express.Router();
 router.post("/register", authLimit, controller.register);
 router.post("/login", authLimit, controller.login);
 router.get("/me", authenticate, controller.me);
+router.post("/change-password",authenticate,authLimit,controller.changePassword);
 
 module.exports = router;
