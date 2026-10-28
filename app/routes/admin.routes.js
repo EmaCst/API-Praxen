@@ -19,6 +19,7 @@ router.delete("/grupos/:groupId",requirePermission(PERMISSIONS.GROUPS_MANAGE),ad
 router.post("/grupos/:groupId/usuarios",requirePermission(PERMISSIONS.GROUPS_MANAGE),adminMutationLimit,groups.assign);
 router.delete("/grupos/:groupId/usuarios/:userId",requirePermission(PERMISSIONS.GROUPS_MANAGE),adminMutationLimit,groups.unassign);
 router.get("/usuarios",requirePermission(PERMISSIONS.USERS_MANAGE),users.list);
+router.post("/usuarios/:userId/restablecer-password",requirePermission(PERMISSIONS.USERS_MANAGE),adminMutationLimit,users.resetPassword);
 router.get("/atletas", requirePermission(PERMISSIONS.ATHLETES_LIST), admin.athletes);
 router.get("/administradores", requirePermission(PERMISSIONS.ADMINS_MANAGE), manage.list);
 router.post("/administradores", requirePermission(PERMISSIONS.ADMINS_MANAGE), adminMutationLimit, manage.create);

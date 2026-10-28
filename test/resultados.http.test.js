@@ -14,6 +14,7 @@ const accounts = new Map([
   [3, { id: 3, nombre: "Carla", username: "carla", role: "athlete", passwordHash: null }],
   [10, { id: 10, nombre: "Directora", username: "directora", role: "admin", passwordHash: null }],
 ]);
+for (const user of accounts.values()) { user.tokenVersion = 0; user.mustChangePassword = false; }
 const athletes = [
   { id: 1, userId: 1, nombre: "Ana", federacion: "Atletismo" },
   { id: 2, userId: 2, nombre: "Beto", federacion: "Atletismo" },
@@ -134,13 +135,13 @@ test.before(async () => {
 test.after(() => new Promise(resolve => server.close(resolve)));
 
 function athleteToken(userId = 1) {
-  return jwt.sign({ athleteId: userId }, process.env.JWT_SECRET, {
+  return jwt.sign({ athleteId: userId, tv: 0 }, process.env.JWT_SECRET, {
     subject: String(userId), issuer: "api-praxen",
     audience: "praxen-app", expiresIn: "1h",
   });
 }
 function adminToken(userId = 10) {
-  return jwt.sign({}, process.env.JWT_SECRET, {
+  return jwt.sign({ tv: 0 }, process.env.JWT_SECRET, {
     subject: String(userId), issuer: "api-praxen",
     audience: "praxen-dashboard", expiresIn: "1h",
   });
@@ -160,7 +161,7 @@ test("usuarios sin autenticar y atletas no acceden a resultados administrativos"
   assert.equal((await get("/api/resultados/me/resumen", adminToken())).status, 403);
   assert.equal((await get("/api/sesiones", adminToken())).status, 403);
   // A forged role claim cannot elevate the database's actual role.
-  const forged = jwt.sign({ role: "admin", athleteId: 1 }, process.env.JWT_SECRET, {
+  const forged = jwt.sign({ role: "admin", athleteId: 1, tv: 0 }, process.env.JWT_SECRET, {
     subject: "1", issuer: "api-praxen", audience: "praxen-app", expiresIn: "1h",
   });
   assert.equal((await get("/api/admin/resultados/resumen", forged)).status, 403);
@@ -235,7 +236,7 @@ test("la API no expone sesiones de otras federaciones ni permite audiencia incor
     "/api/admin/resultados/sesiones/" + sessions[0].sessionId +
     "?federacion=Nataci%C3%B3n", adminToken());
   assert.equal(restricted.status, 404);
-  const wrongAudience = jwt.sign({ role: "admin", athleteId: 1 }, process.env.JWT_SECRET, {
+  const wrongAudience = jwt.sign({ role: "admin", athleteId: 1, tv: 0 }, process.env.JWT_SECRET, {
     subject: "1", issuer: "api-praxen", audience: "praxen-dashboard", expiresIn: "1h",
   });
   assert.equal((await get("/api/admin/resultados/resumen", wrongAudience)).status, 401);

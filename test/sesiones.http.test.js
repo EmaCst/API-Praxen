@@ -25,7 +25,7 @@ require.cache[modelPath] = { id: modelPath, filename: modelPath, loaded: true, e
     },
   }, usuarios: {
     findByPk: async (id) => Number.isInteger(id) && id > 0
-      ? { id, role: 'athlete' } : null,
+      ? { id, role: 'athlete', tokenVersion: 0, mustChangePassword: false } : null,
   },
 }};
 const {app} = require('../server');
@@ -36,7 +36,7 @@ test.before(async () => {
   base = 'http://127.0.0.1:' + server.address().port;
 });
 test.after(() => new Promise(resolve => server.close(resolve)));
-const token = (id=1) => jwt.sign({athleteId:id}, process.env.JWT_SECRET, {subject:String(id), issuer:'api-praxen', audience:'praxen-app', expiresIn:'1h'});
+const token = (id=1) => jwt.sign({athleteId:id,tv:0}, process.env.JWT_SECRET, {subject:String(id), issuer:'api-praxen', audience:'praxen-app', expiresIn:'1h'});
 const payload = {
   sessionId:'f26cb524-1c92-4d9b-9866-3efcbeab1241', athleteId:999, mode:'circuit',
   startedAt:'2026-10-05T03:00:00.000Z', endedAt:'2026-10-05T03:05:00.000Z',

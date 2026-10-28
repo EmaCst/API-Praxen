@@ -12,6 +12,7 @@ const users=new Map([
   [10,{id:10,nombre:"Admin",username:"admin",role:"admin",isActive:true}],
   [11,{id:11,nombre:"Principal",username:"principal",role:"superadmin",isActive:true}],
 ]);
+for (const user of users.values()) {user.tokenVersion=0; user.mustChangePassword=false;}
 const audit=[];
 let nextId=20;
 for(const user of users.values())user.update=async function(values){Object.assign(this,values);return this;};
@@ -25,7 +26,7 @@ require.cache[modelPath]={id:modelPath,filename:modelPath,loaded:true,exports:{
       const roles=where.role[Op.in];const rows=[...users.values()].filter(u=>roles.includes(u.role));
       return {count:rows.length,rows:rows.slice(offset,offset+limit)};
     },
-    create:async data=>{const user={...data,id:nextId++,createdAt:new Date(),update:async function(v){Object.assign(this,v);return this;}};users.set(user.id,user);return user;},
+    create:async data=>{const user={tokenVersion:0,mustChangePassword:false,...data,id:nextId++,createdAt:new Date(),update:async function(v){Object.assign(this,v);return this;}};users.set(user.id,user);return user;},
   },
   atletas:{findOne:async()=>({id:1,userId:1})},
   sesiones:{},
@@ -39,7 +40,7 @@ let server,base;
 test.before(async()=>{server=app.listen(0,"127.0.0.1");await new Promise(resolve=>server.once("listening",resolve));base=`http://127.0.0.1:${server.address().port}`;});
 test.after(()=>new Promise(resolve=>server.close(resolve)));
 function token(id,audience="praxen-dashboard"){
-  return jwt.sign(audience==="praxen-app"?{athleteId:1}:{},process.env.JWT_SECRET,
+  return jwt.sign(audience==="praxen-app"?{athleteId:1,tv:0}:{tv:0},process.env.JWT_SECRET,
     {subject:String(id),issuer:"api-praxen",audience,expiresIn:"1h"});
 }
 async function call(path,id,method="GET",body){const r=await fetch(base+path,{method,headers:{Authorization:"Bearer "+token(id),...(body?{"Content-Type":"application/json"}:{})},body:body?JSON.stringify(body):undefined});return {status:r.status,data:await r.json()};}

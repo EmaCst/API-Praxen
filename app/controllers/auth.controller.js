@@ -99,7 +99,8 @@ exports.changePassword = async (req,res)=>{
   const account=await db.usuarios.findByPk(req.auth.userId);
   if(!account||!(await bcrypt.compare(currentPassword,account.passwordHash)))return res.status(403).json({message:"La contraseña actual es incorrecta."});
   const passwordHash=await bcrypt.hash(newPassword,12);
-  await db.usuarios.update({passwordHash,mustChangePassword:false,tokenVersion:db.sequelize.literal("token_version + 1")},{where:{id:account.id,passwordHash:account.passwordHash}});
+  const [updated]=await db.usuarios.update({passwordHash,mustChangePassword:false,tokenVersion:db.sequelize.literal("token_version + 1")},{where:{id:account.id,passwordHash:account.passwordHash}});
+  if(!updated)return res.status(409).json({message:"La contraseña cambió durante la operación. Vuelve a iniciar sesión."});
   return res.json({message:"Contraseña actualizada. Inicia sesión nuevamente."});
  }catch(error){console.error("Error al cambiar contraseña:",error);return res.status(500).json({message:"No se pudo cambiar la contraseña."});}
 };
