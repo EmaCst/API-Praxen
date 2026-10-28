@@ -34,8 +34,10 @@ module.exports = async function authenticate(req, res, next) {
   }
 
   try {
-    const user = await db.usuarios.findByPk(userId, { attributes: ["id", "role", "isActive"] });
+    const user = await db.usuarios.findByPk(userId, { attributes: ["id", "role", "isActive", "tokenVersion", "mustChangePassword"] });
     const role = user?.role;
+    if(!user||!Number.isInteger(claims.tv)||claims.tv!==user.tokenVersion)return res.status(401).json({message:"La sesión fue revocada. Inicia sesión nuevamente."});
+    if(user.mustChangePassword===true && !["/api/auth/change-password","/api/auth/me"].includes(req.originalUrl.split("?")[0]))return res.status(403).json({message:"Debes cambiar tu contraseña temporal antes de continuar.",code:"PASSWORD_CHANGE_REQUIRED"});
     if (!role || user.isActive === false || !permissionsFor(role).length) {
       return res.status(401).json({ message: "La cuenta ya no está autorizada." });
     }
