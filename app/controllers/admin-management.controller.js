@@ -5,6 +5,7 @@ const { Op } = require("sequelize");
 const db = require("../models");
 const { ROLES } = require("../security/roles");
 const { normalizeUsername, validateUsername, validateNewPassword } = require("../utils/auth.validator");
+const { getDefaultAssociation } = require("../services/default-association");
 
 const publicFields = ["id", "nombre", "username", "role", "isActive", "createdAt"];
 const safeAccount = a => ({ id:a.id, nombre:a.nombre, username:a.username, role:a.role,
@@ -49,9 +50,15 @@ exports.create = async (req,res) => {
     const user=await db.sequelize.transaction(async transaction => {
       if(await db.usuarios.findOne({where:{username},transaction}))
         throw Object.assign(new Error("El nombre de usuario ya está ocupado."),{status:409});
+      const association = await getDefaultAssociation(transaction);
       const created=await db.usuarios.create({nombre,username,passwordHash,role:ROLES.ADMIN,isActive:true},{transaction});
+      await db.associationMemberships.create({
+        userId: created.id,
+        associationId: association.id,
+        createdByUserId: req.auth.userId,
+      }, { transaction });
       await db.adminAudit.create({actorUserId:req.auth.userId,targetUserId:created.id,
-        action:"admin_created",details:{role:ROLES.ADMIN}}, {transaction});
+        action:"admin_created",details:{role:ROLES.ADMIN, associationId: association.id}}, {transaction});
       return created;
     });
     return res.status(201).json({administrador:safeAccount(user)});

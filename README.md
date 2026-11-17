@@ -80,6 +80,8 @@ El primer superadministrador debe crearse de forma controlada en PostgreSQL con 
 
 Consulta **[la documentación completa de roles, ejemplos de peticiones y respuestas, estadísticas y despliegue](docs/admin-results-api.md)**. Las migraciones de esquema son aditivas para bases existentes; una base nueva se genera directamente con nombres de usuario. Las estadísticas se calculan con sesiones reales, no con datos ficticios.
 
+La preparación de la arquitectura multi-asociación, el respaldo previo, la verificación y el rollback están documentados en **[Migración multi-asociación](docs/multi-association-migration.md)**.
+
 ## Pruebas
 
 Ejecuta `npm test`. Las pruebas de validación no necesitan una base de datos Neon. Para probar rutas, configura una base PostgreSQL y usa Postman o curl con el token devuelto al registrar o iniciar sesión.
