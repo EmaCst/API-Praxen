@@ -14,11 +14,14 @@ const users=new Map([
 ]);
 for (const user of users.values()) {user.tokenVersion=0; user.mustChangePassword=false;}
 const audit=[];
+const associationMemberships=[];
 let nextId=20;
 for(const user of users.values())user.update=async function(values){Object.assign(this,values);return this;};
 const modelPath=require.resolve("../app/models");
 require.cache[modelPath]={id:modelPath,filename:modelPath,loaded:true,exports:{
   sequelize:{transaction:async(fn)=>fn({LOCK:{UPDATE:"UPDATE"}})},
+  associations:{findOne:async()=>({id:1,slug:"asociacion-inicial"})},
+  associationMemberships:{create:async data=>{associationMemberships.push(data);return data;}},
   usuarios:{
     findByPk:async id=>users.get(Number(id))||null,
     findOne:async({where})=>[...users.values()].find(u=>u.username===where.username)||null,
@@ -65,6 +68,11 @@ test("creación forzada a admin con auditoría y sin fuga de contraseña",async(
   assert.equal(await bcrypt.compare("mySafePassword123",users.get(response.data.administrador.id).passwordHash),true);
   assert.equal(JSON.stringify(audit).includes("mySafePassword123"),false);
   assert.equal(audit.at(-1).actorUserId,11);
+  assert.deepEqual(associationMemberships.at(-1),{
+    userId: response.data.administrador.id,
+    associationId: 1,
+    createdByUserId: 11,
+  });
   const duplicate=await call("/api/admin/administradores",11,"POST",{nombre:"Duplicado",username:"nueva",password:"password123"});
   assert.equal(duplicate.status,409);
 });
