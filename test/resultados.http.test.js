@@ -318,5 +318,6 @@ test("registro público nunca permite que el cliente se asigne permisos admin", 
   assert.equal(data.user.role, "athlete");
   assert.deepEqual(data.user.permissions, ["results:own:read", "results:own:write"]);
   assert.equal(accounts.get(20).role, "athlete");
-  assert.deepEqual(associationMemberships.at(-1), { userId: 20, associationId: 1 });
+  assert.equal(associationMemberships.length, 0);
+  assert.equal(athletes.find(a => a.userId === 20).associationId, null);
 });

@@ -5,7 +5,6 @@ const jwt = require("jsonwebtoken");
 const db = require("../models");
 const { ROLES, permissionsFor } = require("../security/roles");
 const { normalizeUsername, validateRegistration, validateLogin, validateNewPassword } = require("../utils/auth.validator");
-const { getDefaultAssociation } = require("../services/default-association");
 
 function safeUser(user) {
   return {
@@ -57,7 +56,6 @@ exports.register = async (req, res) => {
       return res.status(409).json({ message: "El nombre de usuario ya está ocupado." });
     const passwordHash = await bcrypt.hash(req.body.password, 12);
     const created = await db.sequelize.transaction(async (transaction) => {
-      const association = await getDefaultAssociation(transaction);
       const user = await db.usuarios.create({
         nombre: req.body.nombre.trim(), username, passwordHash, role: ROLES.ATHLETE,
       }, { transaction });

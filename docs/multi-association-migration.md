@@ -7,7 +7,7 @@ La migración `007-multi-association.sql` introduce la entidad organizativa `ass
 - Cada asociación representa una organización que utiliza Praxen.
 - Un usuario puede tener membresía en más de una asociación.
 - Los roles globales siguen siendo `athlete`, `admin` y `superadmin`. El superadmin conserva alcance global y no necesita una membresía.
-- Los perfiles de atletas y los grupos guardan `association_id` para poder filtrar sus sesiones y grupos por organización.
+- Los perfiles de atletas pueden tener `association_id` nulo cuando la cuenta es general; los atletas afiliados y los grupos guardan el identificador de su asociación.
 - Las sesiones siguen relacionadas con `athletes` mediante `athlete_id`; no se copian ni se modifican.
 - `athletes.federacion` se conserva sin cambios. Federación y asociación son conceptos diferentes: la primera sigue siendo la clasificación deportiva almacenada actualmente; la segunda es la organización propietaria de los datos.
 
@@ -56,7 +56,7 @@ SELECT COUNT(*) AS sessions_preserved
 FROM training_sessions;
 ```
 
-Los dos conteos de registros sin asociación deben ser cero. El total de sesiones debe coincidir con el respaldo previo. Los valores de `federacion`, los grupos y las filas de `user_groups` no se eliminan ni se reescriben.
+El conteo de grupos sin asociación debe ser cero. Los atletas sin asociación pueden corresponder a cuentas generales creadas después de desplegar el flujo de invitaciones. El total de sesiones debe coincidir con el respaldo previo. Los valores de `federacion`, los grupos y las filas de `user_groups` no se eliminan ni se reescriben.
 
 ## Rollback
 

@@ -12,6 +12,7 @@ test("la migración multi-asociación es aditiva e idempotente", () => {
 
   assert.match(sql, /CREATE TABLE IF NOT EXISTS associations/i);
   assert.match(sql, /CREATE TABLE IF NOT EXISTS association_memberships/i);
+  assert.doesNotMatch(sql, /athletes ALTER COLUMN association_id SET NOT NULL/i);
   assert.match(sql, /ADD COLUMN IF NOT EXISTS association_id/i);
   assert.match(sql, /ON CONFLICT \(user_id, association_id\) DO NOTHING/i);
   assert.match(sql, /ON CONFLICT \(slug\) DO NOTHING/i);
@@ -45,6 +46,21 @@ test("los nuevos atletas, administradores y grupos reciben asociación inicial",
   assert.match(admins, /createdByUserId: req\.auth\.userId/);
   assert.match(groups, /getDefaultAssociation\(\)/);
   assert.match(groups, /associationId:association\.id/);
+});
+
+
+test("las invitaciones se almacenan con hash y vencimiento", () => {
+  const sql = read("app/db/migrations/008-association-invitations.sql");
+  assert.match(sql, /token_hash CHAR\(64\) NOT NULL UNIQUE/i);
+  assert.match(sql, /expires_at TIMESTAMPTZ NOT NULL/i);
+  assert.match(sql, /status IN/);
+});
+
+test("el registro público no crea membresías institucionales", () => {
+  const auth = read("app/controllers/auth.controller.js");
+  assert.match(auth, /Public registration creates a general Praxen account/i);
+  assert.match(auth, /associationId: null/i);
+  assert.match(auth, /acceptAssociationInvitation/);
 });
 
 test("la documentación incluye respaldo, comprobaciones y rollback", () => {

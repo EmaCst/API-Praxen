@@ -30,7 +30,7 @@ Todas las rutas de `/api/atletas` y `/api/sesiones` requieren autenticación. Lo
 
 Entrada: `{ "nombre": "Ana Pérez", "federacion": "Atletismo", "username": "ana_123", "password": "una-clave-segura" }`.
 
-Crea una cuenta y su perfil de atleta en una transacción, cifra la contraseña con bcrypt y devuelve `token`, `user` y `atleta`.
+Crea una cuenta general y su perfil de atleta sin asociación en una transacción, cifra la contraseña con bcrypt y devuelve `token`, `user` y `atleta`. Una cuenta general no obtiene acceso institucional automáticamente.
 
 ### POST `/api/auth/login`
 
@@ -80,7 +80,7 @@ El primer superadministrador debe crearse de forma controlada en PostgreSQL con 
 
 Consulta **[la documentación completa de roles, ejemplos de peticiones y respuestas, estadísticas y despliegue](docs/admin-results-api.md)**. Las migraciones de esquema son aditivas para bases existentes; una base nueva se genera directamente con nombres de usuario. Las estadísticas se calculan con sesiones reales, no con datos ficticios.
 
-La preparación de la arquitectura multi-asociación, el respaldo previo, la verificación y el rollback están documentados en **[Migración multi-asociación](docs/multi-association-migration.md)**.
+La preparación de la arquitectura multi-asociación, el respaldo previo, la verificación y el rollback están documentados en **[Migración multi-asociación](docs/multi-association-migration.md)**. Las asociaciones incorporan miembros únicamente mediante invitaciones de administrador; los detalles están en **[Invitaciones a asociaciones](docs/association-invitations.md)**.
 
 ## Pruebas
 

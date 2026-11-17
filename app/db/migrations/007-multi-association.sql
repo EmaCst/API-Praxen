@@ -41,7 +41,6 @@ UPDATE groups
 SET association_id = (SELECT id FROM associations WHERE slug = 'asociacion-inicial')
 WHERE association_id IS NULL;
 
-ALTER TABLE athletes ALTER COLUMN association_id SET NOT NULL;
 ALTER TABLE groups ALTER COLUMN association_id SET NOT NULL;
 
 -- Los superadministradores mantienen alcance global y no necesitan membresía.

@@ -20,6 +20,7 @@ db.sequelize = sequelize;
 db.associations = require("./association.model.js")(sequelize, Sequelize.DataTypes);
 db.usuarios = require("./usuario.model.js")(sequelize, Sequelize.DataTypes);
 db.associationMemberships = require("./association-membership.model.js")(sequelize, Sequelize.DataTypes);
+db.associationInvitations = require("./association-invitation.model.js")(sequelize, Sequelize.DataTypes);
 db.atletas = require("./atleta.model.js")(sequelize, Sequelize.DataTypes);
 db.sesiones = require("./sesion.model.js")(sequelize, Sequelize.DataTypes);
 db.adminAudit = require("./admin-audit.model.js")(sequelize, Sequelize.DataTypes);
