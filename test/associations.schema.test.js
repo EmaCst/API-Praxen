@@ -17,6 +17,8 @@ test("la migración multi-asociación es aditiva e idempotente", () => {
   assert.match(sql, /ON CONFLICT \(slug\) DO NOTHING/i);
   assert.match(sql, /WHERE association_id IS NULL/i);
   assert.doesNotMatch(sql, /\b(DROP TABLE|DELETE FROM)\b/i);
+  const legacyGroupsMigration = read("app/db/migrations/005-groups-security.sql");
+  assert.doesNotMatch(legacyGroupsMigration, /groups_nombre_lower_idx/i);
 });
 
 test("los perfiles, grupos y usuarios actuales se adscriben a la asociación inicial", () => {
