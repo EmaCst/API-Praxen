@@ -28,7 +28,6 @@ test("los perfiles, grupos y usuarios actuales se adscriben a la asociación ini
   assert.match(sql, /UPDATE athletes[\s\S]*?association_id = \(SELECT id FROM associations WHERE slug = 'asociacion-inicial'\)/i);
   assert.match(sql, /UPDATE groups[\s\S]*?association_id = \(SELECT id FROM associations WHERE slug = 'asociacion-inicial'\)/i);
   assert.match(sql, /FROM users[\s\S]*?users\.role <> 'superadmin'/i);
-  assert.match(sql, /athletes ALTER COLUMN association_id SET NOT NULL/i);
   assert.match(sql, /groups ALTER COLUMN association_id SET NOT NULL/i);
   assert.match(sql, /federacion/i);
   assert.doesNotMatch(sql, /ALTER TABLE training_sessions|DROP COLUMN.*federacion/i);
@@ -39,9 +38,8 @@ test("los nuevos atletas, administradores y grupos reciben asociación inicial",
   const admins = read("app/controllers/admin-management.controller.js");
   const groups = read("app/controllers/groups.controller.js");
 
-  assert.match(auth, /getDefaultAssociation\(transaction\)/);
-  assert.match(auth, /associationMemberships\.create/);
-  assert.match(auth, /associationId: association\.id/);
+  assert.match(auth, /associationId: null/);
+  assert.doesNotMatch(auth, /associationMemberships\.create/);
   assert.match(admins, /associationMemberships\.create/);
   assert.match(admins, /createdByUserId: req\.auth\.userId/);
   assert.match(groups, /getDefaultAssociation\(\)/);
