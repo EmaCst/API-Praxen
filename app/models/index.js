@@ -17,9 +17,12 @@ const sequelize = new Sequelize(dbConfig.URL, {
 const db = {};
 db.Sequelize = Sequelize;
 db.sequelize = sequelize;
+db.associations = require("./association.model.js")(sequelize, Sequelize.DataTypes);
+db.usuarios = require("./usuario.model.js")(sequelize, Sequelize.DataTypes);
+db.associationMemberships = require("./association-membership.model.js")(sequelize, Sequelize.DataTypes);
+db.associationInvitations = require("./association-invitation.model.js")(sequelize, Sequelize.DataTypes);
 db.atletas = require("./atleta.model.js")(sequelize, Sequelize.DataTypes);
 db.sesiones = require("./sesion.model.js")(sequelize, Sequelize.DataTypes);
-db.usuarios = require("./usuario.model.js")(sequelize, Sequelize.DataTypes);
 db.adminAudit = require("./admin-audit.model.js")(sequelize, Sequelize.DataTypes);
 db.groups = require("./group.model.js")(sequelize, Sequelize.DataTypes);
 db.userGroups = require("./user-group.model.js")(sequelize, Sequelize.DataTypes);
@@ -37,6 +40,58 @@ db.atletas.belongsTo(db.usuarios, {
   onDelete: "SET NULL",
 });
 
+db.associations.hasMany(db.associationMemberships, {
+  foreignKey: "associationId",
+  as: "membresias",
+  onUpdate: "CASCADE",
+  onDelete: "RESTRICT",
+});
+db.associationMemberships.belongsTo(db.associations, {
+  foreignKey: "associationId",
+  as: "asociacion",
+});
+db.usuarios.hasMany(db.associationMemberships, {
+  foreignKey: "userId",
+  as: "membresiasAsociacion",
+});
+db.associationMemberships.belongsTo(db.usuarios, {
+  foreignKey: "userId",
+  as: "usuario",
+});
+db.usuarios.belongsToMany(db.associations, {
+  through: db.associationMemberships,
+  foreignKey: "userId",
+  otherKey: "associationId",
+  as: "asociaciones",
+});
+db.associations.belongsToMany(db.usuarios, {
+  through: db.associationMemberships,
+  foreignKey: "associationId",
+  otherKey: "userId",
+  as: "usuarios",
+});
+
+db.associations.hasMany(db.atletas, {
+  foreignKey: "associationId",
+  as: "atletas",
+  onUpdate: "CASCADE",
+  onDelete: "RESTRICT",
+});
+db.atletas.belongsTo(db.associations, {
+  foreignKey: "associationId",
+  as: "asociacion",
+});
+db.associations.hasMany(db.groups, {
+  foreignKey: "associationId",
+  as: "grupos",
+  onUpdate: "CASCADE",
+  onDelete: "RESTRICT",
+});
+db.groups.belongsTo(db.associations, {
+  foreignKey: "associationId",
+  as: "asociacion",
+});
+
 db.atletas.hasMany(db.sesiones, {
   foreignKey: "athleteId",
   as: "sesiones",
@@ -50,6 +105,17 @@ db.sesiones.belongsTo(db.atletas, {
   onDelete: "RESTRICT",
 });
 
-db.usuarios.belongsToMany(db.groups,{through:db.userGroups,foreignKey:"userId",otherKey:"groupId",as:"grupos"});
-db.groups.belongsToMany(db.usuarios,{through:db.userGroups,foreignKey:"groupId",otherKey:"userId",as:"usuarios"});
+db.usuarios.belongsToMany(db.groups, {
+  through: db.userGroups,
+  foreignKey: "userId",
+  otherKey: "groupId",
+  as: "grupos",
+});
+db.groups.belongsToMany(db.usuarios, {
+  through: db.userGroups,
+  foreignKey: "groupId",
+  otherKey: "userId",
+  as: "usuarios",
+});
+
 module.exports = db;

@@ -1,6 +1,7 @@
 "use strict";
 
 const bcrypt = require("bcryptjs");
+const crypto = require("crypto");
 const jwt = require("jsonwebtoken");
 const db = require("../models");
 const { ROLES, permissionsFor } = require("../security/roles");
@@ -59,8 +60,13 @@ exports.register = async (req, res) => {
       const user = await db.usuarios.create({
         nombre: req.body.nombre.trim(), username, passwordHash, role: ROLES.ATHLETE,
       }, { transaction });
+      // Public registration creates a general Praxen account. Association
+      // membership is granted only after an administrator invitation is accepted.
       const athlete = await db.atletas.create({
-        nombre: req.body.nombre.trim(), federacion: "Natación", userId: user.id,
+        nombre: req.body.nombre.trim(),
+        federacion: "Natación",
+        userId: user.id,
+        associationId: null,
       }, { transaction });
       return { user, athlete };
     });
@@ -69,6 +75,32 @@ exports.register = async (req, res) => {
     if (isUniqueError(error)) return res.status(409).json({ message: "El nombre de usuario ya está ocupado." });
     console.error("Error al registrar cuenta:", error);
     return res.status(500).json({ message: "No se pudo crear la cuenta." });
+  }
+};
+
+exports.acceptAssociationInvitation = async (req, res) => {
+  const rawToken = typeof req.body?.token === "string" ? req.body.token.trim() : "";
+  if (!/^[a-f0-9]{64}$/i.test(rawToken)) return res.status(400).json({ message: "El código de invitación no es válido." });
+  if (req.auth.role !== ROLES.ATHLETE) return res.status(403).json({ message: "Solo una cuenta de deportista puede aceptar esta invitación." });
+  try {
+    const tokenHash = crypto.createHash("sha256").update(rawToken).digest("hex");
+    const result = await db.sequelize.transaction(async transaction => {
+      const invitation = await db.associationInvitations.findOne({ where: { tokenHash, status: "pending" }, transaction, lock: transaction.LOCK.UPDATE });
+      if (!invitation || invitation.expiresAt <= new Date()) throw Object.assign(new Error("La invitación no existe, venció o ya fue utilizada."), { status: 404 });
+      const user = await db.usuarios.findByPk(req.auth.userId, { transaction, lock: transaction.LOCK.UPDATE });
+      if (!user || user.role !== ROLES.ATHLETE || user.username !== invitation.invitedUsername) throw Object.assign(new Error("Esta invitación fue emitida para otra cuenta."), { status: 403 });
+      const association = await db.associations.findByPk(invitation.associationId, { transaction });
+      if (!association || association.isActive === false) throw Object.assign(new Error("La asociación ya no está disponible."), { status: 410 });
+      await db.associationMemberships.upsert({ userId: user.id, associationId: association.id, isActive: true, createdByUserId: invitation.createdByUserId }, { transaction });
+      await db.atletas.update({ associationId: association.id }, { where: { userId: user.id }, transaction });
+      await invitation.update({ status: "accepted", acceptedAt: new Date(), acceptedByUserId: user.id }, { transaction });
+      return { name: association.name, slug: association.slug };
+    });
+    return res.json({ message: "Te has unido a la asociación.", association: result });
+  } catch (error) {
+    if (error.status) return res.status(error.status).json({ message: error.message });
+    console.error("Error al aceptar invitación:", error);
+    return res.status(500).json({ message: "No se pudo aceptar la invitación." });
   }
 };
 

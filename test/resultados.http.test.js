@@ -39,6 +39,7 @@ function record(id, athleteId, startedAt, type, hits, misses) {
     }] : [],
   };
 }
+const associationMemberships = [];
 const sessions = [
   record(1, 1, "2026-01-01T12:00:00.000Z", "aimlab", 10, 10),
   record(2, 1, "2026-02-01T12:00:00.000Z", "aimlab", 18, 2),
@@ -69,6 +70,10 @@ require.cache[modelPath] = {
     sequelize: {
       authenticate: async () => {},
       transaction: async (fn) => fn({}),
+    },
+    associations: { findOne: async () => ({ id: 1, slug: "asociacion-inicial" }) },
+    associationMemberships: {
+      create: async data => { associationMemberships.push(data); return data; },
     },
     usuarios: {
       findByPk: async id => accounts.get(id) || null,
@@ -313,4 +318,6 @@ test("registro público nunca permite que el cliente se asigne permisos admin", 
   assert.equal(data.user.role, "athlete");
   assert.deepEqual(data.user.permissions, ["results:own:read", "results:own:write"]);
   assert.equal(accounts.get(20).role, "athlete");
+  assert.equal(associationMemberships.length, 0);
+  assert.equal(athletes.find(a => a.userId === 20).associationId, null);
 });

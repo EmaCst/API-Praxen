@@ -15,6 +15,12 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.STRING(120),
         allowNull: true,
       },
+      associationId: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        field: "association_id",
+        references: { model: "associations", key: "id" },
+      },
       userId: {
         type: DataTypes.INTEGER,
         allowNull: true,
