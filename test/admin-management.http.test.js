@@ -71,6 +71,7 @@ test("creación forzada a admin con auditoría y sin fuga de contraseña",async(
   assert.deepEqual(associationMemberships.at(-1),{
     userId: response.data.administrador.id,
     associationId: 1,
+    isActive: true,
     createdByUserId: 11,
   });
   const duplicate=await call("/api/admin/administradores",11,"POST",{nombre:"Duplicado",username:"nueva",password:"password123"});

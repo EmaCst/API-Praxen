@@ -4,14 +4,27 @@ const router = require("express").Router();
 const { admin } = require("../controllers/resultados.controller");
 const { PERMISSIONS, requirePermission } = require("../security/roles");
 const manage = require("../controllers/admin-management.controller");
+const associations = require("../controllers/association-management.controller");
+const associationContext = require("../controllers/association-context.controller");
 const groups=require("../controllers/groups.controller");
 const users=require("../controllers/users-management.controller");
 const invitations=require("../controllers/association-invitations.controller");
 const { rateLimit } = require("express-rate-limit");
 const adminMutationLimit = rateLimit({ windowMs:15*60*1000,limit:15,standardHeaders:"draft-7",legacyHeaders:false });
 
-// All /api/admin routes require a valid dashboard token, the current database
-// role, and an active association scope (except global superadmin).
+// Association discovery and context selection are available to scoped admins.
+// Only the global superadmin can create/update/deactivate associations or assign admins.
+router.get("/asociaciones", requirePermission(PERMISSIONS.ASSOCIATIONS_READ), associations.list);
+router.get("/contexto-asociacion", requirePermission(PERMISSIONS.ASSOCIATION_CONTEXT_MANAGE), associationContext.get);
+router.put("/contexto-asociacion", requirePermission(PERMISSIONS.ASSOCIATION_CONTEXT_MANAGE), adminMutationLimit, associationContext.select);
+router.post("/asociaciones", requirePermission(PERMISSIONS.ASSOCIATIONS_MANAGE), adminMutationLimit, associations.create);
+router.get("/asociaciones/:associationId/administradores", requirePermission(PERMISSIONS.ASSOCIATIONS_MANAGE), associations.listAdmins);
+router.post("/asociaciones/:associationId/administradores", requirePermission(PERMISSIONS.ASSOCIATIONS_MANAGE), adminMutationLimit, associations.assignAdmin);
+router.delete("/asociaciones/:associationId/administradores/:userId", requirePermission(PERMISSIONS.ASSOCIATIONS_MANAGE), adminMutationLimit, associations.revokeAdmin);
+router.get("/asociaciones/:associationId", requirePermission(PERMISSIONS.ASSOCIATIONS_READ), associations.get);
+router.patch("/asociaciones/:associationId", requirePermission(PERMISSIONS.ASSOCIATIONS_MANAGE), adminMutationLimit, associations.update);
+router.patch("/asociaciones/:associationId/estado", requirePermission(PERMISSIONS.ASSOCIATIONS_MANAGE), adminMutationLimit, associations.setActive);
+
 router.post("/asociaciones/:associationId/invitaciones",requirePermission(PERMISSIONS.ASSOCIATION_INVITATIONS_MANAGE),adminMutationLimit,invitations.create);
 router.get("/grupos",requirePermission(PERMISSIONS.GROUPS_READ),groups.list);
 router.get("/grupos/:groupId/usuarios",requirePermission(PERMISSIONS.GROUPS_READ),groups.members);

@@ -75,3 +75,19 @@ test("el ejecutor aplica cada archivo de migración dentro de una transacción",
   assert.match(runner, /sequelize\.transaction\(async\s*\(?transaction\)?\s*=>/);
   assert.match(runner, /sequelize\.query\(statement,\s*\{\s*transaction\s*\}\)/);
 });
+
+test("el contexto de administrador se persiste y la gestión institucional está protegida", () => {
+  const migration = read("app/db/migrations/009-admin-association-context.sql");
+  const userModel = read("app/models/usuario.model.js");
+  const auth = read("app/middleware/auth.middleware.js");
+  const roles = read("app/security/roles.js");
+  const associationAccess = read("app/security/association-access.js");
+  assert.match(migration, /ADD COLUMN IF NOT EXISTS active_association_id/i);
+  assert.match(migration, /REFERENCES associations\(id\)/i);
+  assert.match(userModel, /activeAssociationId/);
+  assert.match(auth, /activeAssociationId/);
+  assert.match(associationAccess, /Selecciona una asociación para continuar/);
+  assert.match(roles, /ASSOCIATIONS_MANAGE/);
+  assert.match(roles, /\[ROLES\.ADMIN\][\s\S]*ASSOCIATIONS_READ/);
+  assert.doesNotMatch(roles.match(/\[ROLES\.ADMIN\]: Object\.freeze\(\[([\s\S]*?)\]\)/)?.[1] || "", /ASSOCIATIONS_MANAGE/);
+});

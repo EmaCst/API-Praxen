@@ -80,7 +80,7 @@ El primer superadministrador debe crearse de forma controlada en PostgreSQL con 
 
 Consulta **[la documentación completa de roles, ejemplos de peticiones y respuestas, estadísticas y despliegue](docs/admin-results-api.md)**. Las migraciones de esquema son aditivas para bases existentes; una base nueva se genera directamente con nombres de usuario. Las estadísticas se calculan con sesiones reales, no con datos ficticios.
 
-La preparación de la arquitectura multi-asociación, el respaldo previo, la verificación y el rollback están documentados en **[Migración multi-asociación](docs/multi-association-migration.md)**. Las asociaciones incorporan miembros únicamente mediante invitaciones de administrador; los detalles están en **[Invitaciones a asociaciones](docs/association-invitations.md)**. El aislamiento de datos por asociación y los controles de acceso están descritos en **[Autorización multi-asociación](docs/association-access-control.md)**.
+La preparación de la arquitectura multi-asociación, el respaldo previo, la verificación y el rollback están documentados en **[Migración multi-asociación](docs/multi-association-migration.md)**. Las asociaciones incorporan miembros únicamente mediante invitaciones de administrador; los detalles están en **[Invitaciones a asociaciones](docs/association-invitations.md)**. El aislamiento de datos por asociación y los controles de acceso están descritos en **[Autorización multi-asociación](docs/association-access-control.md)**. La gestión de asociaciones, membresías, administradores y selección de contexto está en **[Gestión de asociaciones](docs/association-management-api.md)**.
 
 ## Pruebas
 
