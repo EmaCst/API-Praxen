@@ -4,6 +4,7 @@ const crypto = require("crypto");
 const { Op } = require("sequelize");
 const db = require("../models");
 const { ROLES } = require("../security/roles");
+const { assertAssociationAccess } = require("../security/association-access");
 const { normalizeUsername, validateUsername } = require("../utils/auth.validator");
 
 exports.create = async (req, res) => {
@@ -16,12 +17,7 @@ exports.create = async (req, res) => {
       const association = await db.associations.findByPk(associationId, { transaction, lock: transaction.LOCK.UPDATE });
       if (!association || association.isActive === false)
         throw Object.assign(new Error("Asociación no encontrada o inactiva."), { status: 404 });
-      if (req.auth.role !== ROLES.SUPERADMIN) {
-        const membership = await db.associationMemberships.findOne({
-          where: { userId: req.auth.userId, associationId, isActive: true }, transaction,
-        });
-        if (!membership) throw Object.assign(new Error("No puedes invitar usuarios a otra asociación."), { status: 403 });
-      }
+      await assertAssociationAccess(req, associationId);
       const target = await db.usuarios.findOne({ where: { username: invitedUsername }, transaction });
       if (!target || target.role !== ROLES.ATHLETE || target.isActive === false)
         throw Object.assign(new Error("No existe una cuenta activa de deportista con ese usuario."), { status: 404 });
@@ -47,7 +43,6 @@ exports.create = async (req, res) => {
         association: result.association.name, expiresAt: result.invitation.expiresAt,
         status: result.invitation.status,
       },
-      // Shown once so the administrator can share it through the association's chosen channel.
       token: result.token,
     });
   } catch (error) {

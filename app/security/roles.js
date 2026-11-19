@@ -1,9 +1,9 @@
 "use strict";
 
 /**
- * Roles are stored on the account, not in a separate athlete/admin table.
- * The server resolves these permissions from the current database role on
- * every authenticated request. No client can self-assign or elevate a role.
+ * Roles belong to the account. Permissions are resolved from the current
+ * database role on every authenticated request; tenant membership is checked
+ * separately and never comes from JWT claims.
  */
 const ROLES = Object.freeze({
   ATHLETE: "athlete",
@@ -21,7 +21,10 @@ const PERMISSIONS = Object.freeze({
   FEDERATIONS_LIST: "federations:list",
   ADMINS_MANAGE: "admins:manage",
   ADMINS_AUDIT_READ: "admins:audit:read",
-  GROUPS_READ: "groups:read", GROUPS_MANAGE: "groups:manage", USERS_MANAGE: "users:manage",
+  GROUPS_READ: "groups:read",
+  GROUPS_MANAGE: "groups:manage",
+  USERS_MANAGE: "users:manage",
+  ASSOCIATION_INVITATIONS_MANAGE: "association-invitations:manage",
 });
 
 const ROLE_PERMISSIONS = Object.freeze({
