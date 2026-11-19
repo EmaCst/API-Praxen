@@ -13,12 +13,15 @@ const accounts = new Map([
   [2, { id: 2, nombre: "Beto", username: "beto", role: "athlete", passwordHash: null }],
   [3, { id: 3, nombre: "Carla", username: "carla", role: "athlete", passwordHash: null }],
   [10, { id: 10, nombre: "Directora", username: "directora", role: "admin", passwordHash: null }],
+  [11, { id: 11, nombre: "Director B", username: "director-b", role: "admin", passwordHash: null }],
+  [12, { id: 12, nombre: "Principal", username: "principal", role: "superadmin", passwordHash: null }],
 ]);
 for (const user of accounts.values()) { user.tokenVersion = 0; user.mustChangePassword = false; }
 const athletes = [
-  { id: 1, userId: 1, nombre: "Ana", federacion: "Atletismo" },
-  { id: 2, userId: 2, nombre: "Beto", federacion: "Atletismo" },
-  { id: 3, userId: 3, nombre: "Carla", federacion: "Natación" },
+  { id: 1, userId: 1, nombre: "Ana", federacion: "Atletismo", associationId: 1 },
+  { id: 2, userId: 2, nombre: "Beto", federacion: "Atletismo", associationId: 1 },
+  { id: 3, userId: 3, nombre: "Carla", federacion: "Natación", associationId: 1 },
+  { id: 4, userId: 4, nombre: "Diego", federacion: "Natación", associationId: 2 },
 ];
 
 function record(id, athleteId, startedAt, type, hits, misses) {
@@ -39,12 +42,17 @@ function record(id, athleteId, startedAt, type, hits, misses) {
     }] : [],
   };
 }
-const associationMemberships = [];
+const associationMemberships = [
+  { userId: 10, associationId: 1, isActive: true },
+  { userId: 11, associationId: 2, isActive: true },
+];
+const accessAudit = [];
 const sessions = [
   record(1, 1, "2026-01-01T12:00:00.000Z", "aimlab", 10, 10),
   record(2, 1, "2026-02-01T12:00:00.000Z", "aimlab", 18, 2),
   record(3, 2, "2026-02-03T12:00:00.000Z", "aimlab", 5, 5),
   record(4, 3, "2026-02-06T12:00:00.000Z", "running_direction_change", 8, 0),
+  record(5, 4, "2026-02-07T12:00:00.000Z", "aimlab", 12, 1),
 ];
 
 function filterSessions(query) {
@@ -55,9 +63,12 @@ function filterSessions(query) {
     if (where.mode && s.mode !== where.mode) return false;
     if (where.startedAt?.[Op.gte] && s.startedAt < where.startedAt[Op.gte]) return false;
     if (where.startedAt?.[Op.lt] && s.startedAt >= where.startedAt[Op.lt]) return false;
-    if (query.include?.[0]?.where?.federacion) {
+    if (query.include?.[0]?.where) {
+      const includeWhere = query.include[0].where;
       const athlete = athletes.find(a => a.id === s.athleteId);
-      if (athlete?.federacion !== query.include[0].where.federacion) return false;
+      if (includeWhere.federacion && athlete?.federacion !== includeWhere.federacion) return false;
+      const allowedAssociations = includeWhere.associationId?.[Op.in];
+      if (allowedAssociations && !allowedAssociations.includes(athlete?.associationId)) return false;
     }
     return true;
   }).sort((a, b) => b.startedAt - a.startedAt ||
@@ -71,10 +82,16 @@ require.cache[modelPath] = {
       authenticate: async () => {},
       transaction: async (fn) => fn({}),
     },
-    associations: { findOne: async () => ({ id: 1, slug: "asociacion-inicial" }) },
     associationMemberships: {
+      findAll: async ({where}) => associationMemberships.filter(m => m.userId === where.userId && m.isActive === where.isActive),
       create: async data => { associationMemberships.push(data); return data; },
     },
+    associations: {
+      findOne: async () => ({ id: 1, slug: "asociacion-inicial", isActive: true }),
+      findAll: async ({where}) => [{id:1},{id:2}].filter(a => where.id[Op.in].includes(a.id) && where.isActive === true),
+      findByPk: async id => [{id:1,isActive:true},{id:2,isActive:true}].find(a=>a.id===id)||null,
+    },
+    adminAudit: { create: async data => { accessAudit.push(data); return data; } },
     usuarios: {
       findByPk: async id => accounts.get(id) || null,
       findOne: async ({where}) => [...accounts.values()].find(u => u.username === where.username) || null,
@@ -87,16 +104,19 @@ require.cache[modelPath] = {
     atletas: {
       findOne: async ({where}) => athletes.find(a =>
         (where.id === undefined || a.id === where.id) &&
-        (where.userId === undefined || a.userId === where.userId)) || null,
+        (where.userId === undefined || a.userId === where.userId) &&
+        (where.associationId === undefined || where.associationId[Op.in].includes(a.associationId))) || null,
+      findByPk: async id => athletes.find(a=>a.id===id)||null,
       findAll: async ({where, attributes} = {}) => {
         let selected = athletes;
         if (where?.federacion) selected = selected.filter(a => a.federacion === where.federacion);
+        if (where?.associationId) selected = selected.filter(a => where.associationId[Op.in].includes(a.associationId));
         if (attributes?.some(x => Array.isArray(x))) {
-          const groups = [...new Set(athletes.map(a => a.federacion))];
+          const groups = [...new Set(selected.map(a => a.federacion))];
           return groups.map(federacion => ({
             federacion,
             get: key => key === "totalAtletas"
-              ? String(athletes.filter(a => a.federacion === federacion).length)
+              ? String(selected.filter(a => a.federacion === federacion).length)
               : undefined,
           }));
         }
@@ -105,7 +125,8 @@ require.cache[modelPath] = {
       findAndCountAll: async ({where, limit, offset}) => {
         const selected = athletes.filter(a =>
           (!where.federacion || a.federacion === where.federacion) &&
-          (!where.id || a.id === where.id));
+          (!where.id || a.id === where.id) &&
+          (!where.associationId || where.associationId[Op.in].includes(a.associationId)));
         return { count: selected.length, rows: selected.slice(offset, offset + limit) };
       },
       create: async body => {
@@ -288,6 +309,43 @@ test("token administrativo deja de servir al revocar su rol en PostgreSQL", asyn
   } finally { user.role = before; }
 });
 
+
+test("el admin queda aislado a sus asociaciones incluso manipulando filtros e IDs", async () => {
+  const adminA = await get("/api/admin/resultados/resumen", adminToken(10));
+  assert.equal(adminA.status, 200);
+  assert.equal(adminA.data.summary.totalSessions, 4);
+  assert.equal(adminA.data.summary.athleteCount, 3);
+
+  const otherAthlete = await get("/api/admin/resultados/resumen?athleteId=4", adminToken(10));
+  assert.equal(otherAthlete.status, 404);
+  const otherAssociation = await get("/api/admin/resultados/resumen?associationId=2", adminToken(10));
+  assert.equal(otherAssociation.status, 403);
+  const ownDirectory = await get("/api/admin/atletas", adminToken(10));
+  assert.equal(ownDirectory.data.total, 3);
+
+  const adminB = await get("/api/admin/resultados/resumen", adminToken(11));
+  assert.equal(adminB.status, 200);
+  assert.equal(adminB.data.summary.totalSessions, 1);
+  assert.equal(adminB.data.summary.athleteCount, 1);
+  const bDirectory = await get("/api/admin/atletas", adminToken(11));
+  assert.equal(bDirectory.data.total, 1);
+  assert.equal(bDirectory.data.atletas[0].id, 4);
+
+  const global = await get("/api/admin/resultados/resumen", adminToken(12));
+  assert.equal(global.status, 200);
+  assert.equal(global.data.summary.totalSessions, 5);
+  const selected = await get("/api/admin/resultados/resumen?associationId=2", adminToken(12));
+  assert.equal(selected.status, 200);
+  assert.equal(selected.data.summary.totalSessions, 1);
+  assert.ok(accessAudit.some(event => event.action === "association_access_denied"));
+
+  const membership = associationMemberships.find(m => m.userId === 10);
+  membership.isActive = false;
+  try {
+    assert.equal((await get("/api/admin/resultados/resumen", adminToken(10))).status, 403);
+  } finally { membership.isActive = true; }
+});
+
 test("login distingue público app frente a panel administrativo", async () => {
   const response = await fetch(base + "/api/auth/login", {
     method: "POST", headers: { "Content-Type": "application/json" },
@@ -318,6 +376,6 @@ test("registro público nunca permite que el cliente se asigne permisos admin", 
   assert.equal(data.user.role, "athlete");
   assert.deepEqual(data.user.permissions, ["results:own:read", "results:own:write"]);
   assert.equal(accounts.get(20).role, "athlete");
-  assert.equal(associationMemberships.length, 0);
+  assert.equal(associationMemberships.some(m => m.userId === 20), false);
   assert.equal(athletes.find(a => a.userId === 20).associationId, null);
 });

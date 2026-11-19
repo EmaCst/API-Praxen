@@ -2,6 +2,7 @@
 
 const { Op } = require("sequelize");
 const db = require("../models");
+const { resolveAssociationIds, recordDeniedAssociationAccess } = require("../security/association-access");
 const { EXERCISE_LISTS, isMetricKey } = require("./results.analytics");
 const { UUID_PATTERN } = require("../utils/sesion.validator");
 
@@ -67,13 +68,15 @@ function parseFilters(query, { admin = false, list = false } = {}) {
   const groupId = admin && query.groupId !== undefined ? positiveInteger(query.groupId,"groupId") : null;
   const athleteId = admin && query.athleteId !== undefined
     ? positiveInteger(query.athleteId, "athleteId") : null;
+  const associationId = admin && query.associationId !== undefined
+    ? positiveInteger(query.associationId, "associationId") : null;
   const period = query.period || "month";
   if (!["day", "week", "month"].includes(period)) {
     throw new ResultsError(400, "period debe ser day, week o month.");
   }
   return {
     exerciseType, metric, mode, from, to,
-    federation: federation?.trim() || null, athleteId, groupId,
+    federation: federation?.trim() || null, athleteId, groupId, associationId,
     period,
     limit: positiveInteger(query.limit, "limit", {
       defaultValue: list ? 20 : 50, max: 100,
@@ -84,32 +87,75 @@ function parseFilters(query, { admin = false, list = false } = {}) {
   };
 }
 
-async function assertAthlete(athleteId, userId) {
+async function assertAthlete(athleteId, userId, associationIds = null, req = null) {
+  const where = userId ? { id: athleteId, userId } : { id: athleteId };
+  if (Array.isArray(associationIds)) where.associationId = { [Op.in]: associationIds };
   const athlete = await db.atletas.findOne({
-    where: userId ? { id: athleteId, userId } : { id: athleteId },
-    attributes: ["id", "nombre", "federacion"],
+    where,
+    attributes: ["id", "nombre", "federacion", "associationId"],
   });
-  if (!athlete) throw new ResultsError(404, "Atleta no encontrado.");
+  if (!athlete) {
+    if (Array.isArray(associationIds) && typeof db.atletas.findByPk === "function") {
+      const outside = await db.atletas.findByPk(athleteId, { attributes: ["id", "associationId"] });
+      if (outside && !associationIds.includes(Number(outside.associationId))) {
+        await recordDeniedAssociationAccess(req, outside.associationId, "athlete_outside_membership");
+      }
+    }
+    throw new ResultsError(404, "Atleta no encontrado.");
+  }
   return athlete;
 }
 
-async function buildScope(filters, { admin = false, currentAthleteId = null, userId = null } = {}) {
-  if(admin&&filters.groupId){const group=await db.groups.findByPk(filters.groupId);if(!group)throw new ResultsError(404,"Grupo no encontrado.");}
+async function buildScope(filters, {
+  admin = false, currentAthleteId = null, userId = null, req = null,
+} = {}) {
   if (!admin) {
     const athlete = await assertAthlete(currentAthleteId, userId);
     return { type: "athlete", athleteId: athlete.id, athlete, federation: athlete.federacion };
   }
+
+  let associationIds;
+  try {
+    associationIds = await resolveAssociationIds(req, filters.associationId);
+  } catch (error) {
+    if (error.status === 403 && filters.associationId) {
+      throw new ResultsError(403, error.message);
+    }
+    throw new ResultsError(error.status || 403, error.message || "No tienes acceso a esta asociación.");
+  }
+
+  let group = null;
+  if (filters.groupId) {
+    group = await db.groups.findByPk(filters.groupId);
+    if (!group) throw new ResultsError(404, "Grupo no encontrado.");
+    if (Array.isArray(associationIds) && !associationIds.includes(Number(group.associationId))) {
+      await recordDeniedAssociationAccess(req, group.associationId, "group_outside_membership");
+      throw new ResultsError(404, "Grupo no encontrado.");
+    }
+  }
+
   if (filters.athleteId) {
-    if(filters.groupId){const athlete=await db.atletas.findByPk(filters.athleteId);const inGroup=athlete?.userId?await db.userGroups.findOne({where:{groupId:filters.groupId,userId:athlete.userId}}):null;if(!inGroup)throw new ResultsError(404,"El atleta no pertenece al grupo.");}
-    const athlete = await assertAthlete(filters.athleteId);
+    const athlete = await assertAthlete(filters.athleteId, null, associationIds, req);
+    if (filters.groupId) {
+      if (Number(athlete.associationId) !== Number(group.associationId)) {
+        throw new ResultsError(404, "El atleta no pertenece al grupo.");
+      }
+      const inGroup = athlete.userId
+        ? await db.userGroups.findOne({ where: { groupId: filters.groupId, userId: athlete.userId } })
+        : null;
+      if (!inGroup) throw new ResultsError(404, "El atleta no pertenece al grupo.");
+    }
     if (filters.federation && athlete.federacion !== filters.federation) {
       throw new ResultsError(404, "El atleta no pertenece a esa federación.");
     }
-    return { type: "athlete", athleteId: athlete.id, athlete, federation: athlete.federacion };
+    return {
+      type: "athlete", athleteId: athlete.id, athlete,
+      federation: athlete.federacion, associationIds,
+    };
   }
-  if (filters.groupId) return {type:"group",groupId:filters.groupId,federation:filters.federation};
-  if (filters.federation) return { type: "federation", federation: filters.federation };
-  return { type: "global" };
+  if (filters.groupId) return { type: "group", groupId: filters.groupId, federation: filters.federation, associationIds, groupAssociationId: group.associationId };
+  if (filters.federation) return { type: "federation", federation: filters.federation, associationIds };
+  return { type: "global", associationIds };
 }
 
 function makeQuery(filters, scope) {
@@ -119,15 +165,25 @@ function makeQuery(filters, scope) {
   if (filters.from || filters.to) {
     where.startedAt = {};
     if (filters.from) where.startedAt[Op.gte] = filters.from;
-    if (filters.to) {
-      const nextDay = new Date(filters.to.getTime() + 86400000);
-      where.startedAt[Op.lt] = nextDay;
-    }
+    if (filters.to) where.startedAt[Op.lt] = new Date(filters.to.getTime() + 86400000);
   }
-  const include = (scope.type === "federation" || scope.type === "group") ? [{
+
+  const needsAthleteJoin = scope.type === "federation" || scope.type === "group" ||
+    (scope.type !== "athlete" && Array.isArray(scope.associationIds));
+  const include = needsAthleteJoin ? [{
     model: db.atletas, as: "atleta",
     attributes: ["id", "nombre", "federacion"],
-    where: { ...(scope.federation?{federacion:scope.federation}:{}), ...(scope.type==="group"?{userId:{[Op.in]:db.sequelize.literal("(SELECT user_id FROM user_groups WHERE group_id = "+Number(scope.groupId)+")")}}:{}) }, required: true,
+    where: {
+      ...(scope.type === "group" ? { associationId: scope.groupAssociationId } :
+        Array.isArray(scope.associationIds) ? { associationId: { [Op.in]: scope.associationIds } } : {}),
+      ...(scope.federation ? { federacion: scope.federation } : {}),
+      ...(scope.type === "group" ? {
+        userId: { [Op.in]: db.sequelize.literal(
+          "(SELECT user_id FROM user_groups WHERE group_id = " + Number(scope.groupId) + ")",
+        ) },
+      } : {}),
+    },
+    required: true,
   }] : [];
   return { where, include };
 }
@@ -196,11 +252,12 @@ function publicScope(scope) {
     ...(scope.athleteId ? { athleteId: scope.athleteId } : {}),
     ...(scope.federation ? { federacion: scope.federation } : {}),
     ...(scope.groupId ? { groupId: scope.groupId } : {}),
+    ...(Array.isArray(scope.associationIds) && scope.associationIds.length === 1 ? { associationId: scope.associationIds[0] } : {}),
   };
 }
 
 function respondError(res, error, label = "resultados") {
-  if (error instanceof ResultsError) {
+  if (error instanceof ResultsError || Number.isInteger(error.status)) {
     return res.status(error.status).json({ message: error.message });
   }
   console.error("Error al consultar " + label + ":", error);

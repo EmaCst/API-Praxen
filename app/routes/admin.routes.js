@@ -10,8 +10,8 @@ const invitations=require("../controllers/association-invitations.controller");
 const { rateLimit } = require("express-rate-limit");
 const adminMutationLimit = rateLimit({ windowMs:15*60*1000,limit:15,standardHeaders:"draft-7",legacyHeaders:false });
 
-// All /api/admin routes require a valid dashboard token and the current
-// database role 'admin', checked before this router runs.
+// All /api/admin routes require a valid dashboard token, the current database
+// role, and an active association scope (except global superadmin).
 router.post("/asociaciones/:associationId/invitaciones",requirePermission(PERMISSIONS.ASSOCIATION_INVITATIONS_MANAGE),adminMutationLimit,invitations.create);
 router.get("/grupos",requirePermission(PERMISSIONS.GROUPS_READ),groups.list);
 router.get("/grupos/:groupId/usuarios",requirePermission(PERMISSIONS.GROUPS_READ),groups.members);

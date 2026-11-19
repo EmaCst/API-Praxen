@@ -9,6 +9,7 @@ const {
   publicSession, loadSessions, latest, respondError, validateSessionId,
   matchesExercise,
 } = require("../services/results.query");
+const { resolveAssociationIds, recordDeniedAssociationAccess } = require("../security/association-access");
 
 function authorizeAdminAction(req, permission) {
   if (!req.auth.permissions.includes(permission)) {
@@ -22,6 +23,7 @@ async function queryContext(req, admin, { list = false } = {}) {
     admin,
     currentAthleteId: req.auth.athleteId,
     userId: req.auth.userId,
+    req,
   });
   if (admin) {
     authorizeAdminAction(req, scope.type === "athlete"
@@ -38,6 +40,7 @@ function payloadFilters(filters) {
     exerciseType: filters.exerciseType, metric: filters.metric,
     mode: filters.mode, period: filters.period,
     groupId:filters.groupId||null,
+    associationId:filters.associationId||null,
     from: filters.from ? filters.from.toISOString().slice(0, 10) : null,
     to: filters.to ? filters.to.toISOString().slice(0, 10) : null,
   };
@@ -144,8 +147,26 @@ admin.athletes = async (req, res) => {
     authorizeAdminAction(req, PERMISSIONS.ATHLETES_LIST);
     const filters = parseFilters(req.query, { admin: true, list: true });
     const whereFilter = {};
+    const associationIds = await resolveAssociationIds(req, filters.associationId);
+    if (associationIds) whereFilter.associationId = { [Op.in]: associationIds };
     if (filters.federation) whereFilter.federacion = filters.federation;
-    if(filters.groupId)whereFilter.userId={[Op.in]:db.sequelize.literal("(SELECT user_id FROM user_groups WHERE group_id = "+Number(filters.groupId)+")")};
+    if (filters.athleteId && Array.isArray(associationIds) && typeof db.atletas.findByPk === "function") {
+      const target = await db.atletas.findByPk(filters.athleteId, { attributes: ["id", "associationId"] });
+      if (target && !associationIds.includes(Number(target.associationId))) {
+        await recordDeniedAssociationAccess(req, target.associationId, "athlete_directory_outside_membership");
+        throw new ResultsError(404, "Atleta no encontrado.");
+      }
+    }
+    if (filters.groupId) {
+      const group = await db.groups.findByPk(filters.groupId);
+      if (!group) throw new ResultsError(404, "Grupo no encontrado.");
+      if (Array.isArray(associationIds) && !associationIds.includes(Number(group.associationId))) {
+        await recordDeniedAssociationAccess(req, group.associationId, "athlete_list_group_outside_membership");
+        throw new ResultsError(404, "Grupo no encontrado.");
+      }
+      whereFilter.associationId = group.associationId;
+      whereFilter.userId = { [Op.in]: db.sequelize.literal("(SELECT user_id FROM user_groups WHERE group_id = "+Number(filters.groupId)+")") };
+    }
     if (filters.athleteId) whereFilter.id = filters.athleteId;
     if (req.query.search !== undefined) {
       if (typeof req.query.search !== "string" ||
@@ -174,12 +195,14 @@ admin.athletes = async (req, res) => {
 admin.federations = async (req, res) => {
   try {
     authorizeAdminAction(req, PERMISSIONS.FEDERATIONS_LIST);
+    const filters = parseFilters(req.query, { admin: true });
+    const associationIds = await resolveAssociationIds(req, filters.associationId);
     const rows = await db.atletas.findAll({
       attributes: [
         "federacion",
         [fn("COUNT", col("id")), "totalAtletas"],
       ],
-      where: { federacion: { [Op.not]: null } },
+      where: { federacion: { [Op.not]: null }, ...(associationIds ? { associationId: { [Op.in]: associationIds } } : {}) },
       group: ["federacion"],
       order: [["federacion", "ASC"]],
     });
@@ -199,9 +222,11 @@ admin.federationSummary = async (req, res) => {
       throw new ResultsError(400,
         "Este endpoint compara todas las federaciones; omite athleteId y federacion.");
     }
-    const sessions = await loadSessions(makeQuery(filters, { type: "global" }));
+    const associationIds = await resolveAssociationIds(req, filters.associationId);
+    const sessions = await loadSessions(makeQuery(filters, { type: "global", associationIds }));
     const athleteRows = await db.atletas.findAll({
       attributes: ["id", "federacion"],
+      ...(associationIds ? { where: { associationId: { [Op.in]: associationIds } } } : {}),
     });
     const federationById = new Map(athleteRows.map(row => [Number(row.id), row.federacion]));
     const buckets = new Map();
