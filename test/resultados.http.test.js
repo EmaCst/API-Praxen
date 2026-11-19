@@ -109,7 +109,8 @@ require.cache[modelPath] = {
       findByPk: async id => athletes.find(a=>a.id===id)||null,
       findAll: async ({where, attributes} = {}) => {
         let selected = athletes;
-        if (where?.federacion) selected = selected.filter(a => a.federacion === where.federacion);
+        if (typeof where?.federacion === "string") selected = selected.filter(a => a.federacion === where.federacion);
+        else if (where?.federacion?.[Op.not] === null) selected = selected.filter(a => a.federacion !== null);
         if (where?.associationId) selected = selected.filter(a => where.associationId[Op.in].includes(a.associationId));
         if (attributes?.some(x => Array.isArray(x))) {
           const groups = [...new Set(selected.map(a => a.federacion))];

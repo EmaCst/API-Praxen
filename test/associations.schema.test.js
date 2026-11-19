@@ -43,7 +43,8 @@ test("los nuevos atletas, administradores y grupos reciben asociación inicial",
   assert.match(admins, /associationMemberships\.create/);
   assert.match(admins, /createdByUserId: req\.auth\.userId/);
   assert.match(groups, /getDefaultAssociation\(\)/);
-  assert.match(groups, /associationId:association\.id/);
+  assert.match(groups, /associationId/);
+  assert.match(groups, /resolveCreateAssociation/);
 });
 
 
