@@ -46,15 +46,23 @@ exports.create = async (req,res) => {
     return res.status(400).json({message:"Se requiere nombre (2-120), usuario (3-32 caracteres) y contraseña de 8-72 bytes."});
   // No se acepta `role`, `isActive`, `permissions` ni IDs del cliente.
   try {
+    const requestedAssociationId = body.associationId === undefined ? null : Number(body.associationId);
+    if (body.associationId !== undefined && (!Number.isSafeInteger(requestedAssociationId) || requestedAssociationId < 1))
+      return res.status(400).json({ message: "associationId debe ser un entero positivo." });
     const passwordHash=await bcrypt.hash(body.password,12);
     const user=await db.sequelize.transaction(async transaction => {
       if(await db.usuarios.findOne({where:{username},transaction}))
         throw Object.assign(new Error("El nombre de usuario ya está ocupado."),{status:409});
-      const association = await getDefaultAssociation(transaction);
+      const association = requestedAssociationId === null
+        ? await getDefaultAssociation(transaction)
+        : await db.associations.findByPk(requestedAssociationId, { transaction, lock: transaction.LOCK.UPDATE });
+      if (!association || association.isActive === false)
+        throw Object.assign(new Error("Asociación no encontrada o inactiva."), { status: 404 });
       const created=await db.usuarios.create({nombre,username,passwordHash,role:ROLES.ADMIN,isActive:true},{transaction});
       await db.associationMemberships.create({
         userId: created.id,
         associationId: association.id,
+        isActive: true,
         createdByUserId: req.auth.userId,
       }, { transaction });
       await db.adminAudit.create({actorUserId:req.auth.userId,targetUserId:created.id,

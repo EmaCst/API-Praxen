@@ -10,8 +10,6 @@ function accessError(status, message) {
 async function recordDeniedAssociationAccess(req, associationId, reason = "outside_membership") {
   if (!req?.auth?.userId || !db.adminAudit?.create) return;
   try {
-    // admin_audit_logs requires a target user. For access attempts without a
-    // known target account, actor and target are the same account.
     await db.adminAudit.create({
       actorUserId: req.auth.userId,
       targetUserId: req.auth.userId,
@@ -25,14 +23,14 @@ async function recordDeniedAssociationAccess(req, associationId, reason = "outsi
       },
     });
   } catch (error) {
-    // Denial must never be weakened by an audit-storage failure.
     console.error("No se pudo registrar un intento de acceso entre asociaciones:", error.message);
   }
 }
 
 /**
- * Returns null for a global superadmin, or the exact set of associations the
- * current admin may access. A requested tenant can only narrow that set.
+ * A superadmin has global scope. An admin is restricted to the association
+ * selected in their persisted context. If the account has multiple active
+ * memberships and no valid context, the client must select one first.
  */
 async function resolveAssociationIds(req, requestedAssociationId) {
   const requested = requestedAssociationId === undefined || requestedAssociationId === null || requestedAssociationId === ""
@@ -56,11 +54,19 @@ async function resolveAssociationIds(req, requestedAssociationId) {
   }
 
   const allowed = [...new Set(req.auth.associationIds.map(Number))];
-  if (requested !== null && !allowed.includes(requested)) {
-    await recordDeniedAssociationAccess(req, requested);
-    throw accessError(403, "No tienes acceso a esta asociación.");
+  const active = Number(req.auth.activeAssociationId) || null;
+  if (!active && allowed.length > 1) {
+    throw accessError(409, "Selecciona una asociación para continuar.");
   }
-  return requested === null ? allowed : [requested];
+  const selected = active || allowed[0];
+  if (!allowed.includes(selected)) {
+    throw accessError(403, "El contexto seleccionado ya no está autorizado.");
+  }
+  if (requested !== null && requested !== selected) {
+    await recordDeniedAssociationAccess(req, requested);
+    throw accessError(403, "No tienes acceso a esta asociación en el contexto actual.");
+  }
+  return [selected];
 }
 
 async function assertAssociationAccess(req, associationId, { hideExistence = false } = {}) {

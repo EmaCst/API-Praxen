@@ -5,11 +5,6 @@ const { Op } = require("sequelize");
 const db = require("../models");
 const { ROLES, permissionsFor } = require("../security/roles");
 
-/**
- * JWT identifies the account, but neither role nor tenant scope is trusted
- * from its claims. Current role and active association memberships are read
- * from PostgreSQL for every authenticated request.
- */
 module.exports = async function authenticate(req, res, next) {
   const secret = process.env.JWT_SECRET;
   if (!secret || secret.length < 32) {
@@ -35,7 +30,7 @@ module.exports = async function authenticate(req, res, next) {
 
   try {
     const user = await db.usuarios.findByPk(userId, {
-      attributes: ["id", "role", "isActive", "tokenVersion", "mustChangePassword"],
+      attributes: ["id", "role", "isActive", "tokenVersion", "mustChangePassword", "activeAssociationId"],
     });
     const role = user?.role;
     if (!user || !Number.isInteger(claims.tv) || claims.tv !== user.tokenVersion) {
@@ -57,6 +52,7 @@ module.exports = async function authenticate(req, res, next) {
     }
 
     let associationIds = [];
+    let activeAssociationId = null;
     if (role === ROLES.ADMIN) {
       const memberships = await db.associationMemberships.findAll({
         where: { userId, isActive: true },
@@ -75,9 +71,13 @@ module.exports = async function authenticate(req, res, next) {
       if (!associationIds.length) {
         return res.status(403).json({ message: "Tu cuenta no tiene una asociación activa asignada." });
       }
+      const preferred = Number(user.activeAssociationId);
+      if (Number.isSafeInteger(preferred) && associationIds.includes(preferred)) {
+        activeAssociationId = preferred;
+      } else if (associationIds.length === 1) {
+        activeAssociationId = associationIds[0];
+      }
     } else if (role === ROLES.SUPERADMIN) {
-      // null explicitly means global scope; [] means no access and is never
-      // used for a superadmin.
       associationIds = null;
     }
 
@@ -105,6 +105,7 @@ module.exports = async function authenticate(req, res, next) {
       role,
       athleteId: isAthlete ? athleteId : null,
       associationIds,
+      activeAssociationId,
       permissions: permissionsFor(role),
     };
     return next();
