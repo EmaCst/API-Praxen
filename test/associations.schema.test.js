@@ -17,6 +17,9 @@ test("la migración multi-asociación es aditiva e idempotente", () => {
   assert.ok(createdAtDefault >= 0 && createdAtDefault < initialInsert);
   assert.ok(updatedAtDefault >= 0 && updatedAtDefault < initialInsert);
   assert.match(sql, /CREATE TABLE IF NOT EXISTS association_memberships/i);
+  const membershipCreatedAtDefault = sql.indexOf("ALTER TABLE association_memberships ALTER COLUMN created_at SET DEFAULT NOW()");
+  const membershipInsert = sql.indexOf("INSERT INTO association_memberships (user_id, association_id, is_active)");
+  assert.ok(membershipCreatedAtDefault >= 0 && membershipCreatedAtDefault < membershipInsert);
   assert.doesNotMatch(sql, /athletes ALTER COLUMN association_id SET NOT NULL/i);
   assert.match(sql, /ADD COLUMN IF NOT EXISTS association_id/i);
   assert.match(sql, /ON CONFLICT \(user_id, association_id\) DO NOTHING/i);
