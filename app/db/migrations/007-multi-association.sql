@@ -31,6 +31,9 @@ CREATE TABLE IF NOT EXISTS association_memberships (
   PRIMARY KEY (user_id, association_id)
 );
 
+-- La carga inicial de membresías usa SQL directo y necesita un DEFAULT en PostgreSQL.
+ALTER TABLE association_memberships ALTER COLUMN created_at SET DEFAULT NOW();
+
 ALTER TABLE athletes
   ADD COLUMN IF NOT EXISTS association_id INTEGER REFERENCES associations(id) ON UPDATE CASCADE ON DELETE RESTRICT;
 
