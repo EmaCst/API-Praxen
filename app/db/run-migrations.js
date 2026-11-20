@@ -142,8 +142,9 @@ async function runMigrations(sequelize) {
     // the whole file and the next startup can safely retry it.
     await sequelize.transaction(async (transaction) => {
       for (let index = 0; index < statements.length; index += 1) {
+        const statement = statements[index];
         try {
-          await sequelize.query(statements[index], { transaction });
+          await sequelize.query(statement, { transaction });
         } catch (error) {
           throw new Error(
             "Falló la migración " + filename + " en la sentencia " + (index + 1)
