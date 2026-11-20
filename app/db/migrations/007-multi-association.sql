@@ -9,6 +9,11 @@ CREATE TABLE IF NOT EXISTS associations (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- sequelize.sync() puede crear estas columnas sin DEFAULT en PostgreSQL.
+-- La migración inserta directamente por SQL, así que los defaults deben existir en la BD.
+ALTER TABLE associations ALTER COLUMN created_at SET DEFAULT NOW();
+ALTER TABLE associations ALTER COLUMN updated_at SET DEFAULT NOW();
+
 CREATE UNIQUE INDEX IF NOT EXISTS associations_slug_lower_idx ON associations (LOWER(slug));
 CREATE UNIQUE INDEX IF NOT EXISTS associations_name_lower_idx ON associations (LOWER(name));
 

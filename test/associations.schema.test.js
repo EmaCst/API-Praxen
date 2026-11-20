@@ -11,6 +11,11 @@ test("la migración multi-asociación es aditiva e idempotente", () => {
   const sql = read("app/db/migrations/007-multi-association.sql");
 
   assert.match(sql, /CREATE TABLE IF NOT EXISTS associations/i);
+  const createdAtDefault = sql.indexOf("ALTER TABLE associations ALTER COLUMN created_at SET DEFAULT NOW()");
+  const updatedAtDefault = sql.indexOf("ALTER TABLE associations ALTER COLUMN updated_at SET DEFAULT NOW()");
+  const initialInsert = sql.indexOf("INSERT INTO associations (name, slug)");
+  assert.ok(createdAtDefault >= 0 && createdAtDefault < initialInsert);
+  assert.ok(updatedAtDefault >= 0 && updatedAtDefault < initialInsert);
   assert.match(sql, /CREATE TABLE IF NOT EXISTS association_memberships/i);
   assert.doesNotMatch(sql, /athletes ALTER COLUMN association_id SET NOT NULL/i);
   assert.match(sql, /ADD COLUMN IF NOT EXISTS association_id/i);
