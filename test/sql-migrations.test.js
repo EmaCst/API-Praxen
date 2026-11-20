@@ -29,6 +29,7 @@ test("el separador respeta cadenas, identificadores, comentarios y etiquetas dol
     "-- este punto y coma ; pertenece al comentario",
     "SELECT 'uno;dos';",
     "SELECT 'texto con ''comilla; interna''';",
+    'SELECT "col;name" FROM sample;',
     "DO $migration$ BEGIN PERFORM 'dentro; del bloque'; /* comentario; interno */ END $migration$;",
     "/* comentario externo; /* comentario anidado; */ final */ SELECT 4;",
   ].join("\n");
