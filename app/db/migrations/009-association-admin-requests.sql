@@ -19,3 +19,16 @@ CREATE UNIQUE INDEX IF NOT EXISTS association_admin_requests_pending_unique_idx
 
 CREATE INDEX IF NOT EXISTS association_admin_requests_association_status_idx
   ON association_admin_requests (association_id, status, created_at DESC);
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conname = 'association_admin_requests_status_check'
+      AND conrelid = 'association_admin_requests'::regclass
+  ) THEN
+    ALTER TABLE association_admin_requests ADD CONSTRAINT association_admin_requests_status_check
+      CHECK (status IN ('pending', 'approved', 'rejected'));
+  END IF;
+END $$;
