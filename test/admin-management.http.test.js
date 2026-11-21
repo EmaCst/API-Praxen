@@ -20,8 +20,9 @@ for(const user of users.values())user.update=async function(values){Object.assig
 const modelPath=require.resolve("../app/models");
 require.cache[modelPath]={id:modelPath,filename:modelPath,loaded:true,exports:{
   sequelize:{transaction:async(fn)=>fn({LOCK:{UPDATE:"UPDATE"}})},
-  associations:{findOne:async()=>({id:1,slug:"asociacion-inicial"}),findAll:async({where})=>[{id:1,isActive:true}].filter(a=>where.id[Op.in].includes(a.id)&&where.isActive===true)},
-  associationMemberships:{findAll:async({where})=>associationMemberships.filter(m=>m.userId===where.userId&&m.isActive!==false),create:async data=>{associationMemberships.push(data);return data;}},
+  associations:{findOne:async()=>({id:1,name:"Asociación inicial",slug:"asociacion-inicial",isActive:true}),findByPk:async()=>({id:1,name:"Asociación inicial",slug:"asociacion-inicial",isActive:true}),findAll:async({where})=>[{id:1,isActive:true}].filter(a=>where.id[Op.in].includes(a.id)&&where.isActive===true)},
+  associationMemberships:{findAll:async({where})=>associationMemberships.filter(m=>(where.associationId===undefined||m.associationId===where.associationId)&&(where.isActive===undefined||m.isActive===where.isActive)),create:async data=>{associationMemberships.push(data);return data;}},
+  associationAdminRequests:{create:async data=>({id:90,...data,createdAt:new Date()})},
   usuarios:{
     findByPk:async id=>users.get(Number(id))||null,
     findOne:async({where})=>[...users.values()].find(u=>u.username===where.username)||null,
