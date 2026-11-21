@@ -35,7 +35,7 @@ test("el flujo requiere aprobación de un administrador activo de la misma asoci
 test("la asignación directa solo se permite como mecanismo de primer administrador", () => {
   const controller = read("app/controllers/association-management.controller.js");
   assert.match(controller, /activeAdmins > 0/);
-  assert.match(controller, /asignar otro administrador/);
+  assert.match(controller, /incorporar otro administrador/);
   assert.match(controller, /association_admin_assigned_initial/);
 });
 
