@@ -186,7 +186,7 @@ exports.decide = async (req, res) => {
             userId: target.id,
             associationId,
             isActive: true,
-            createdByUserId: current.requestedByUserId,
+            createdByUserId: req.auth.userId,
           }, { transaction });
         }
       }
