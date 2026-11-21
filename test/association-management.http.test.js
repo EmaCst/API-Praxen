@@ -108,7 +108,9 @@ require.cache[modelPath] = {
           (where.status === undefined || item.status === where.status)).sort((a,b)=>b.id-a.id);
         return { count: rows.length, rows: rows.slice(offset, offset + limit) };
       },
-      findOne: async ({ where }) => adminRequests.find(item => item.id === where.id && item.associationId === where.associationId) || null,
+      findOne: async ({ where }) => adminRequests.find(item =>
+        (where.id === undefined || item.id === where.id) && item.associationId === where.associationId &&
+        (where.status === undefined || item.status === where.status)) || null,
     },
     adminAudit: {
       create: async event => { audit.push({ ...event, createdAt: new Date() }); return event; },
