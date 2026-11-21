@@ -9,6 +9,7 @@ const associationContext = require("../controllers/association-context.controlle
 const groups=require("../controllers/groups.controller");
 const users=require("../controllers/users-management.controller");
 const invitations=require("../controllers/association-invitations.controller");
+const adminRequests=require("../controllers/association-admin-requests.controller");
 const { rateLimit } = require("express-rate-limit");
 const adminMutationLimit = rateLimit({ windowMs:15*60*1000,limit:15,standardHeaders:"draft-7",legacyHeaders:false });
 
@@ -21,6 +22,10 @@ router.post("/asociaciones", requirePermission(PERMISSIONS.ASSOCIATIONS_MANAGE),
 router.get("/asociaciones/:associationId/administradores", requirePermission(PERMISSIONS.ASSOCIATIONS_MANAGE), associations.listAdmins);
 router.post("/asociaciones/:associationId/administradores", requirePermission(PERMISSIONS.ASSOCIATIONS_MANAGE), adminMutationLimit, associations.assignAdmin);
 router.delete("/asociaciones/:associationId/administradores/:userId", requirePermission(PERMISSIONS.ASSOCIATIONS_MANAGE), adminMutationLimit, associations.revokeAdmin);
+router.post("/asociaciones/:associationId/solicitudes-administrador", requirePermission(PERMISSIONS.ASSOCIATIONS_MANAGE), adminMutationLimit, adminRequests.create);
+router.get("/asociaciones/:associationId/solicitudes-administrador", requirePermission(PERMISSIONS.ASSOCIATION_ADMIN_REQUESTS_REVIEW), adminRequests.list);
+router.patch("/asociaciones/:associationId/solicitudes-administrador/:requestId", requirePermission(PERMISSIONS.ASSOCIATION_ADMIN_REQUESTS_REVIEW), adminMutationLimit, adminRequests.decide);
+router.get("/asociaciones/:associationId/auditoria-administradores", requirePermission(PERMISSIONS.ASSOCIATION_ADMIN_REQUESTS_REVIEW), adminRequests.audit);
 router.get("/asociaciones/:associationId", requirePermission(PERMISSIONS.ASSOCIATIONS_READ), associations.get);
 router.patch("/asociaciones/:associationId", requirePermission(PERMISSIONS.ASSOCIATIONS_MANAGE), adminMutationLimit, associations.update);
 router.patch("/asociaciones/:associationId/estado", requirePermission(PERMISSIONS.ASSOCIATIONS_MANAGE), adminMutationLimit, associations.setActive);
