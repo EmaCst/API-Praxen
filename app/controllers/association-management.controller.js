@@ -183,6 +183,21 @@ exports.assignAdmin = async (req, res) => {
       if (!user || user.role !== ROLES.ADMIN || user.isActive === false) {
         throw error(404, "Administrador activo no encontrado.");
       }
+      const activeMemberships = await db.associationMemberships.findAll({
+        where: { associationId, isActive: true },
+        attributes: ["userId"],
+        transaction,
+      });
+      const activeUserIds = [...new Set(activeMemberships.map(item => Number(item.userId)))];
+      const activeAdmins = activeUserIds.length
+        ? await db.usuarios.count({
+          where: { id: { [Op.in]: activeUserIds }, role: ROLES.ADMIN, isActive: true },
+          transaction,
+        })
+        : 0;
+      if (activeAdmins > 0) {
+        throw error(409, "La asociación ya tiene administradores activos. Debes enviar una solicitud para incorporar otro administrador.");
+      }
       const membership = await db.associationMemberships.findOne({
         where: { userId, associationId }, transaction, lock: transaction.LOCK.UPDATE,
       });
@@ -196,7 +211,7 @@ exports.assignAdmin = async (req, res) => {
       }
       await db.adminAudit.create({
         actorUserId: req.auth.userId, targetUserId: userId,
-        action: "association_admin_assigned", details: { associationId },
+        action: "association_admin_assigned_initial", details: { associationId },
       }, { transaction });
       return { user, association };
     });
