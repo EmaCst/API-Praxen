@@ -180,7 +180,7 @@ exports.decide = async (req, res) => {
           where: { userId: target.id, associationId }, transaction, lock: transaction.LOCK.UPDATE,
         });
         if (membership) {
-          await membership.update({ isActive: true, createdByUserId: current.requestedByUserId }, { transaction });
+          await membership.update({ isActive: true, createdByUserId: req.auth.userId }, { transaction });
         } else {
           await db.associationMemberships.create({
             userId: target.id,
