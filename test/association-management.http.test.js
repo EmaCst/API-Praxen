@@ -110,7 +110,8 @@ require.cache[modelPath] = {
       },
       findOne: async ({ where }) => adminRequests.find(item =>
         (where.id === undefined || item.id === where.id) && item.associationId === where.associationId &&
-        (where.status === undefined || item.status === where.status)) || null,
+        (where.status === undefined || item.status === where.status) &&
+        (where.targetUserId === undefined || item.targetUserId === where.targetUserId)) || null,
     },
     adminAudit: {
       create: async event => { audit.push({ ...event, createdAt: new Date() }); return event; },
@@ -239,6 +240,11 @@ test("administradores actuales aprueban solicitudes y la asignación directa que
   assert.ok(memberships.some(item => item.userId === 20 && item.associationId === 2 && item.isActive));
   assert.ok(audit.some(item => item.action === "association_admin_request_created"));
   assert.ok(audit.some(item => item.action === "association_admin_request_approved"));
+  const scopedAudit = await call("/api/admin/asociaciones/2/auditoria-administradores", 10);
+  assert.equal(scopedAudit.status, 200);
+  assert.ok(scopedAudit.data.eventos.some(item => item.action === "association_admin_request_approved"));
+  const outsideRequests = await call("/api/admin/asociaciones/3/solicitudes-administrador", 10);
+  assert.equal(outsideRequests.status, 403);
   const secondDecision = await call("/api/admin/asociaciones/2/solicitudes-administrador/"+requestId, 11, "PATCH", { decision: "rejected" });
   assert.equal(secondDecision.status, 409);
 });
