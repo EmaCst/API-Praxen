@@ -42,7 +42,7 @@ Con un JWT de `superadmin` y el permiso `admins:manage`:
 | GET | `/api/admin/administradores/auditoria?limit=50&offset=0` | Registro de acciones |
 
 `POST` admite `nombre`, `username` y `password` (8–72 bytes UTF-8), pero ignora
-cualquier rol o permiso enviado por el cliente. No se permite crear o modificar
+cualquier rol o permiso enviado por el cliente. La cuenta se asigna directamente solo si la asociación elegida no tiene administradores activos; de lo contrario se crea una solicitud pendiente para aprobación de un administrador actual. Si se omite `associationId`, se utiliza la asociación inicial. No se permite crear o modificar
 superadministradores desde la web, desactivar la propia cuenta ni modificar a
 otro superadministrador. El alta inicial o recuperación de una cuenta
 superadministradora requiere un cambio autorizado en la base de datos. Los tokens de cuentas desactivadas
