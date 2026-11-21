@@ -234,6 +234,18 @@ exports.audit = async (req, res) => {
       where, order: [["createdAt", "DESC"], ["id", "DESC"]], limit, offset,
       attributes: ["id", "actorUserId", "targetUserId", "action", "details", "createdAt"],
     });
-    return res.json({ total: count, limit, offset, eventos: rows });
+    const eventos = await Promise.all(rows.map(async row => {
+      const event = typeof row.get === "function" ? row.get({ plain: true }) : row;
+      const [actor, target] = await Promise.all([
+        db.usuarios.findByPk(event.actorUserId, { attributes: ["id", "nombre", "username"] }),
+        db.usuarios.findByPk(event.targetUserId, { attributes: ["id", "nombre", "username"] }),
+      ]);
+      return {
+        ...event,
+        actor: actor ? { id: actor.id, nombre: actor.nombre, username: actor.username } : null,
+        target: target ? { id: target.id, nombre: target.nombre, username: target.username } : null,
+      };
+    }));
+    return res.json({ total: count, limit, offset, eventos });
   } catch (error) { return sendError(res, error); }
 };
