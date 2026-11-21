@@ -26,6 +26,8 @@ test("el flujo requiere aprobación de un administrador activo de la misma asoci
   assert.match(controller, /current\.status !== "pending"/);
   assert.match(controller, /association_admin_request_approved/);
   assert.match(controller, /association_admin_request_rejected/);
+  assert.match(controller, /where: \{ associationId, targetUserId, status: "pending" \}/);
+  assert.match(controller, /current\.status !== "pending"/);
   assert.match(roles, /ASSOCIATION_ADMIN_REQUESTS_REVIEW/);
   assert.match(roles.match(/\[ROLES\.ADMIN\]: Object\.freeze\(\[([\s\S]*?)\]\)/)?.[1] || "", /ASSOCIATION_ADMIN_REQUESTS_REVIEW/);
   assert.match(routes, /solicitudes-administrador/);
@@ -34,7 +36,10 @@ test("el flujo requiere aprobación de un administrador activo de la misma asoci
 
 test("la asignación directa solo se permite como mecanismo de primer administrador", () => {
   const controller = read("app/controllers/association-management.controller.js");
+  const accountController = read("app/controllers/admin-management.controller.js");
   assert.match(controller, /activeAdmins > 0/);
+  assert.match(accountController, /activeAdmins === 0/);
+  assert.match(accountController, /associationAdminRequests\.create/);
   assert.match(controller, /incorporar otro administrador/);
   assert.match(controller, /association_admin_assigned_initial/);
 });
