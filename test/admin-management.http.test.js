@@ -14,7 +14,7 @@ const users=new Map([
 ]);
 for (const user of users.values()) {user.tokenVersion=0; user.mustChangePassword=false;}
 const audit=[];
-const associationMemberships=[{userId:10,associationId:1,isActive:true}];
+const associationMemberships=[];
 let nextId=20;
 for(const user of users.values())user.update=async function(values){Object.assign(this,values);return this;};
 const modelPath=require.resolve("../app/models");
