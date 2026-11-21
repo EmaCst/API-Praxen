@@ -115,6 +115,8 @@ exports.list = async (req, res) => {
   const associationId = parseId(req.params.associationId);
   if (!associationId) return res.status(400).json({ message: "ID de asociación inválido." });
   try {
+    const association = await db.associations.findByPk(associationId);
+    if (!association || association.isActive === false) throw fail(404, "Asociación no encontrada o inactiva.");
     await assertAssociationAccess(req, associationId);
     if (req.auth.role === ROLES.ADMIN) {
       await assertReviewer(req, associationId);
