@@ -31,7 +31,8 @@ app.use(
       }
       return callback(new Error("Origen no permitido por CORS."));
     },
-    methods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+    // PUT is required by the association-context selection endpoint.
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
   })
 );
