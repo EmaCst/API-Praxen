@@ -93,6 +93,10 @@ exports.create = async (req, res) => {
         where: { userId: targetUserId, associationId, isActive: true }, transaction,
       });
       if (membership) throw fail(409, "El administrador ya pertenece a esta asociación.");
+      const pending = await db.associationAdminRequests.findOne({
+        where: { associationId, targetUserId, status: "pending" }, transaction,
+      });
+      if (pending) throw fail(409, "Ya existe una solicitud pendiente para esta cuenta y asociación.");
       const request = await db.associationAdminRequests.create({
         associationId,
         targetUserId,
