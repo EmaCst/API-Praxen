@@ -42,7 +42,7 @@ async function assertReviewer(req, associationId, transaction) {
   const membership = await db.associationMemberships.findOne({
     where: { userId: req.auth.userId, associationId, isActive: true },
     transaction,
-    lock: transaction.LOCK.UPDATE,
+    ...(transaction ? { lock: transaction.LOCK.UPDATE } : {}),
   });
   if (!membership) throw fail(403, "No tienes una membresía administrativa activa en esta asociación.");
 }
