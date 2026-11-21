@@ -82,6 +82,10 @@ require.cache[modelPath] = {
         const rows = [...users.values()].filter(u => roles.includes(u.role));
         return { count: rows.length, rows: rows.slice(offset, offset + limit) };
       },
+      count: async ({ where }) => [...users.values()].filter(user =>
+        (where.id?.[Op.in] === undefined || where.id[Op.in].includes(user.id)) &&
+        (where.role === undefined || where.role === user.role) &&
+        (where.isActive === undefined || where.isActive === user.isActive)).length,
       create: async values => {
         const user = { ...values, id: nextUserId++, isActive: true, tokenVersion: 0,
           mustChangePassword: false, createdAt: new Date(),
@@ -217,6 +221,6 @@ test("las operaciones institucionales generan auditoría", () => {
   const actions = audit.map(item => item.action);
   for (const action of [
     "association_created", "association_updated", "association_deactivated",
-    "association_admin_assigned", "association_admin_revoked", "association_context_selected",
+    "association_admin_assigned_initial", "association_admin_revoked", "association_context_selected",
   ]) assert.ok(actions.includes(action), action);
 });
