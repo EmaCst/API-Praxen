@@ -25,6 +25,7 @@ require.cache[modelPath]={id:modelPath,filename:modelPath,loaded:true,exports:{
   usuarios:{
     findByPk:async id=>users.get(Number(id))||null,
     findOne:async({where})=>[...users.values()].find(u=>u.username===where.username)||null,
+    count:async({where})=>[...users.values()].filter(u=>(where.id?.[Op.in]===undefined||where.id[Op.in].includes(u.id))&&(where.role===undefined||u.role===where.role)&&(where.isActive===undefined||u.isActive===where.isActive)).length,
     findAndCountAll:async({where,limit,offset})=>{
       const roles=where.role[Op.in];const rows=[...users.values()].filter(u=>roles.includes(u.role));
       return {count:rows.length,rows:rows.slice(offset,offset+limit)};
@@ -76,6 +77,12 @@ test("creación forzada a admin con auditoría y sin fuga de contraseña",async(
   });
   const duplicate=await call("/api/admin/administradores",11,"POST",{nombre:"Duplicado",username:"nueva",password:"password123"});
   assert.equal(duplicate.status,409);
+  const pending=await call("/api/admin/administradores",11,"POST",{nombre:"Otra Admin",username:"otra-admin",password:"password123"});
+  assert.equal(pending.status,201);
+  assert.equal(pending.data.membershipStatus,"pending");
+  assert.equal(pending.data.solicitud.status,"pending");
+  assert.equal(associationMemberships.some(m=>m.userId===pending.data.administrador.id&&m.isActive),false);
+  assert.ok(audit.some(item=>item.action==="association_admin_request_created"&&item.targetUserId===pending.data.administrador.id));
 });
 test("desactivar un admin revoca su JWT; superadmin no se puede desactivar",async()=>{
   const target=[...users.values()].find(u=>u.username==="nueva");
