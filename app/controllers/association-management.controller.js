@@ -229,6 +229,10 @@ exports.revokeAdmin = async (req, res) => {
   if (!associationId || !userId) return res.status(400).json({ message: "IDs de asociación y administrador inválidos." });
   try {
     const result = await db.sequelize.transaction(async transaction => {
+      const association = await db.associations.findByPk(associationId, {
+        transaction, lock: transaction.LOCK.UPDATE,
+      });
+      if (!association) throw error(404, "Asociación no encontrada.");
       const membership = await db.associationMemberships.findOne({
         where: { userId, associationId, isActive: true }, transaction, lock: transaction.LOCK.UPDATE,
       });
