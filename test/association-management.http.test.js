@@ -249,7 +249,9 @@ test("crear un administrador permite asignarlo a una asociación concreta", asyn
   });
   assert.equal(response.status, 201);
   const userId = response.data.administrador.id;
-  assert.ok(memberships.some(m => m.userId === userId && m.associationId === 2 && m.isActive));
+  assert.equal(response.data.membershipStatus, "pending");
+  assert.equal(response.data.solicitud.status, "pending");
+  assert.equal(memberships.some(m => m.userId === userId && m.associationId === 2 && m.isActive), false);
   assert.equal(users.get(userId).role, "admin");
 });
 
