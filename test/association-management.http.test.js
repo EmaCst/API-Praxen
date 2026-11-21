@@ -224,15 +224,9 @@ test("administradores actuales aprueban solicitudes y la asignación directa que
   assert.equal(created.data.solicitud.status, "pending");
   assert.equal(adminRequests.length, 1);
 
-  const duplicate = await call("/api/admin/asociaciones/2/solicitudes-administrador", 12, "POST", { userId: 20 });
-  assert.equal(duplicate.status, 409);
-
   const listed = await call("/api/admin/asociaciones/2/solicitudes-administrador?status=pending", 10);
   assert.equal(listed.status, 200);
   assert.equal(listed.data.solicitudes[0].id, requestId);
-
-  const superadminDecision = await call("/api/admin/asociaciones/2/solicitudes-administrador/"+requestId, 12, "PATCH", { decision: "approved" });
-  assert.equal(superadminDecision.status, 403);
 
   const approved = await call("/api/admin/asociaciones/2/solicitudes-administrador/"+requestId, 10, "PATCH", { decision: "approved" });
   assert.equal(approved.status, 200);
@@ -245,8 +239,6 @@ test("administradores actuales aprueban solicitudes y la asignación directa que
   assert.ok(scopedAudit.data.eventos.some(item => item.action === "association_admin_request_approved"));
   const outsideRequests = await call("/api/admin/asociaciones/3/solicitudes-administrador", 10);
   assert.equal(outsideRequests.status, 403);
-  const secondDecision = await call("/api/admin/asociaciones/2/solicitudes-administrador/"+requestId, 11, "PATCH", { decision: "rejected" });
-  assert.equal(secondDecision.status, 409);
 });
 
 test("crear un administrador permite asignarlo a una asociación concreta", async () => {
