@@ -8,7 +8,7 @@ const path = require("node:path");
 const read = relative => fs.readFileSync(path.join(__dirname, "..", relative), "utf8");
 
 test("la migración de solicitudes administrativas es aditiva y evita pendientes duplicadas", () => {
-  const sql = read("app/db/migrations/009-association-admin-requests.sql");
+  const sql = read("app/db/migrations/010-association-admin-requests.sql");
   assert.match(sql, /CREATE TABLE IF NOT EXISTS association_admin_requests/i);
   assert.match(sql, /requested_by_user_id/i);
   assert.match(sql, /decided_by_user_id/i);
