@@ -42,7 +42,7 @@ Con un JWT de `superadmin` y el permiso `admins:manage`:
 | GET | `/api/admin/administradores/auditoria?limit=50&offset=0` | Registro de acciones |
 
 `POST` admite `nombre`, `username` y `password` (8–72 bytes UTF-8), pero ignora
-cualquier rol o permiso enviado por el cliente. No se permite crear o modificar
+cualquier rol o permiso enviado por el cliente. La cuenta se asigna directamente solo si la asociación elegida no tiene administradores activos; de lo contrario se crea una solicitud pendiente para aprobación de un administrador actual. Si se omite `associationId`, se utiliza la asociación inicial. No se permite crear o modificar
 superadministradores desde la web, desactivar la propia cuenta ni modificar a
 otro superadministrador. El alta inicial o recuperación de una cuenta
 superadministradora requiere un cambio autorizado en la base de datos. Los tokens de cuentas desactivadas
@@ -53,6 +53,8 @@ Las transacciones escriben la cuenta y su auditoría conjuntamente en
 contraseñas ni hashes. El endpoint de auditoría requiere `admins:audit:read`.
 La migración aditiva `003-superadmins.sql` incorpora `users.is_active` y la
 tabla de auditoría, sin promover automáticamente ninguna cuenta.
+
+La delegación de administradores por asociación utiliza un flujo de solicitud y aprobación cuando ya existe al menos un administrador activo. Consulta **[Solicitudes de incorporación de administradores](docs/association-admin-requests.md)** para las reglas, endpoints y permisos. La asignación directa queda reservada al primer administrador (o a la recuperación de una asociación sin administradores activos).
 
 El token administrativo caduca por defecto en **2 horas** (`JWT_ADMIN_EXPIRES_IN`); el token de la app mantiene sus 12 horas configurables. No existen rutas de recuperación automática ni envío de mensajes; una recuperación debe gestionarse de forma autorizada por un administrador de la base de datos.
 

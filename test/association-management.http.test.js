@@ -38,12 +38,14 @@ const memberships = [
 const audit = [];
 let nextAssociationId = 4;
 let nextUserId = 21;
+let nextAdminRequestId = 1;
+const adminRequests = [];
 const tx = { LOCK: { UPDATE: "UPDATE" } };
 const modelPath = require.resolve("../app/models");
 require.cache[modelPath] = {
   id: modelPath, filename: modelPath, loaded: true,
   exports: {
-    sequelize: { transaction: async fn => fn(tx) },
+    sequelize: { transaction: async fn => fn(tx), literal: value => value },
     associations: {
       findAll: async ({ where } = {}) => [...associations.values()].filter(a =>
         (!where?.id || where.id[Op.in].includes(a.id)) &&
@@ -82,6 +84,10 @@ require.cache[modelPath] = {
         const rows = [...users.values()].filter(u => roles.includes(u.role));
         return { count: rows.length, rows: rows.slice(offset, offset + limit) };
       },
+      count: async ({ where }) => [...users.values()].filter(user =>
+        (where.id?.[Op.in] === undefined || where.id[Op.in].includes(user.id)) &&
+        (where.role === undefined || where.role === user.role) &&
+        (where.isActive === undefined || where.isActive === user.isActive)).length,
       create: async values => {
         const user = { ...values, id: nextUserId++, isActive: true, tokenVersion: 0,
           mustChangePassword: false, createdAt: new Date(),
@@ -90,7 +96,27 @@ require.cache[modelPath] = {
         return user;
       },
     },
-    adminAudit: { create: async event => { audit.push({ ...event, createdAt: new Date() }); return event; } },
+    associationAdminRequests: {
+      create: async values => {
+        const request = { id: nextAdminRequestId++, ...values, createdAt: new Date(), decidedAt: null, decidedByUserId: null,
+          update: async function(v) { Object.assign(this, v); return this; } };
+        adminRequests.push(request);
+        return request;
+      },
+      findAndCountAll: async ({ where, limit, offset }) => {
+        const rows = adminRequests.filter(item => item.associationId === where.associationId &&
+          (where.status === undefined || item.status === where.status)).sort((a,b)=>b.id-a.id);
+        return { count: rows.length, rows: rows.slice(offset, offset + limit) };
+      },
+      findOne: async ({ where }) => adminRequests.find(item =>
+        (where.id === undefined || item.id === where.id) && item.associationId === where.associationId &&
+        (where.status === undefined || item.status === where.status) &&
+        (where.targetUserId === undefined || item.targetUserId === where.targetUserId)) || null,
+    },
+    adminAudit: {
+      create: async event => { audit.push({ ...event, createdAt: new Date() }); return event; },
+      findAndCountAll: async ({ limit, offset }) => ({ count: audit.length, rows: audit.slice().reverse().slice(offset, offset + limit) }),
+    },
     atletas: { findOne: async () => ({ id: 1, userId: 1 }) },
   },
 };
@@ -188,13 +214,42 @@ test("superadmin puede asignar y revocar membresía de admin sin borrar la cuent
   assert.equal(forbidden.status, 403);
 });
 
+test("administradores actuales aprueban solicitudes y la asignación directa queda bloqueada", async () => {
+  const direct = await call("/api/admin/asociaciones/2/administradores", 12, "POST", { userId: 20 });
+  assert.equal(direct.status, 409);
+
+  const created = await call("/api/admin/asociaciones/2/solicitudes-administrador", 12, "POST", { userId: 20 });
+  assert.equal(created.status, 201);
+  const requestId = created.data.solicitud.id;
+  assert.equal(created.data.solicitud.status, "pending");
+  assert.equal(adminRequests.length, 1);
+
+  const listed = await call("/api/admin/asociaciones/2/solicitudes-administrador?status=pending", 10);
+  assert.equal(listed.status, 200);
+  assert.equal(listed.data.solicitudes[0].id, requestId);
+
+  const approved = await call("/api/admin/asociaciones/2/solicitudes-administrador/"+requestId, 10, "PATCH", { decision: "approved" });
+  assert.equal(approved.status, 200);
+  assert.equal(approved.data.solicitud.status, "approved");
+  assert.ok(memberships.some(item => item.userId === 20 && item.associationId === 2 && item.isActive));
+  assert.ok(audit.some(item => item.action === "association_admin_request_created"));
+  assert.ok(audit.some(item => item.action === "association_admin_request_approved"));
+  const scopedAudit = await call("/api/admin/asociaciones/2/auditoria-administradores", 10);
+  assert.equal(scopedAudit.status, 200);
+  assert.ok(scopedAudit.data.eventos.some(item => item.action === "association_admin_request_approved"));
+  const outsideRequests = await call("/api/admin/asociaciones/3/solicitudes-administrador", 10);
+  assert.equal(outsideRequests.status, 403);
+});
+
 test("crear un administrador permite asignarlo a una asociación concreta", async () => {
   const response = await call("/api/admin/administradores", 12, "POST", {
     nombre: "Admin Centro", username: "admin-centro", password: "passwordSeguro123", associationId: 2,
   });
   assert.equal(response.status, 201);
   const userId = response.data.administrador.id;
-  assert.ok(memberships.some(m => m.userId === userId && m.associationId === 2 && m.isActive));
+  assert.equal(response.data.membershipStatus, "pending");
+  assert.equal(response.data.solicitud.status, "pending");
+  assert.equal(memberships.some(m => m.userId === userId && m.associationId === 2 && m.isActive), false);
   assert.equal(users.get(userId).role, "admin");
 });
 
@@ -217,6 +272,6 @@ test("las operaciones institucionales generan auditoría", () => {
   const actions = audit.map(item => item.action);
   for (const action of [
     "association_created", "association_updated", "association_deactivated",
-    "association_admin_assigned", "association_admin_revoked", "association_context_selected",
+    "association_admin_assigned_initial", "association_admin_revoked", "association_context_selected",
   ]) assert.ok(actions.includes(action), action);
 });

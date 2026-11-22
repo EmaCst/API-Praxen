@@ -53,23 +53,73 @@ exports.create = async (req,res) => {
     const user=await db.sequelize.transaction(async transaction => {
       if(await db.usuarios.findOne({where:{username},transaction}))
         throw Object.assign(new Error("El nombre de usuario ya está ocupado."),{status:409});
-      const association = requestedAssociationId === null
+      let association = requestedAssociationId === null
         ? await getDefaultAssociation(transaction)
-        : await db.associations.findByPk(requestedAssociationId, { transaction, lock: transaction.LOCK.UPDATE });
+        : await db.associations.findByPk(requestedAssociationId, { transaction });
       if (!association || association.isActive === false)
         throw Object.assign(new Error("Asociación no encontrada o inactiva."), { status: 404 });
+      association = await db.associations.findByPk(association.id, {
+        transaction, lock: transaction.LOCK.UPDATE,
+      });
+      if (!association || association.isActive === false)
+        throw Object.assign(new Error("Asociación no encontrada o inactiva."), { status: 404 });
+
       const created=await db.usuarios.create({nombre,username,passwordHash,role:ROLES.ADMIN,isActive:true},{transaction});
-      await db.associationMemberships.create({
-        userId: created.id,
-        associationId: association.id,
-        isActive: true,
-        createdByUserId: req.auth.userId,
-      }, { transaction });
+      const memberships = await db.associationMemberships.findAll({
+        where: { associationId: association.id, isActive: true },
+        attributes: ["userId"],
+        transaction,
+      });
+      const memberIds = [...new Set(memberships.map(item => Number(item.userId)))];
+      const activeAdmins = memberIds.length
+        ? await db.usuarios.count({
+          where: { id: { [Op.in]: memberIds }, role: ROLES.ADMIN, isActive: true },
+          transaction,
+        })
+        : 0;
+
+      let membershipStatus = "pending";
+      let requestId = null;
+      if (activeAdmins === 0) {
+        await db.associationMemberships.create({
+          userId: created.id,
+          associationId: association.id,
+          isActive: true,
+          createdByUserId: req.auth.userId,
+        }, { transaction });
+        membershipStatus = "active";
+        await db.adminAudit.create({
+          actorUserId: req.auth.userId,
+          targetUserId: created.id,
+          action: "association_admin_assigned_initial",
+          details: { associationId: association.id },
+        }, { transaction });
+      } else {
+        const request = await db.associationAdminRequests.create({
+          associationId: association.id,
+          targetUserId: created.id,
+          requestedByUserId: req.auth.userId,
+          status: "pending",
+        }, { transaction });
+        requestId = request.id;
+        await db.adminAudit.create({
+          actorUserId: req.auth.userId,
+          targetUserId: created.id,
+          action: "association_admin_request_created",
+          details: { associationId: association.id, requestId },
+        }, { transaction });
+      }
+
       await db.adminAudit.create({actorUserId:req.auth.userId,targetUserId:created.id,
-        action:"admin_created",details:{role:ROLES.ADMIN, associationId: association.id}}, {transaction});
-      return created;
+        action:"admin_created",details:{role:ROLES.ADMIN, associationId: association.id, membershipStatus, requestId}}, {transaction});
+      return { user: created, membershipStatus, requestId, association };
     });
-    return res.status(201).json({administrador:safeAccount(user)});
+    return res.status(201).json({
+      administrador: safeAccount(user.user),
+      asociacion: { id: user.association.id, name: user.association.name },
+      membershipStatus: user.membershipStatus,
+      ...(user.requestId ? { solicitud: { id: user.requestId, status: "pending" } } : {}),
+    });
   }catch(e){return sendError(res,e);}
 };
 
@@ -80,6 +130,15 @@ exports.setActive = async (req,res) => {
   if(id===req.auth.userId) return res.status(403).json({message:"No puedes cambiar tu propia cuenta."});
   try {
     const account=await db.sequelize.transaction(async transaction => {
+      const memberships = await db.associationMemberships.findAll({
+        where: { userId: id, isActive: true },
+        attributes: ["associationId"],
+        transaction,
+      });
+      const associationIds = [...new Set(memberships.map(item => Number(item.associationId)))].sort((a,b)=>a-b);
+      for (const associationId of associationIds) {
+        await db.associations.findByPk(associationId, { transaction, lock: transaction.LOCK.UPDATE });
+      }
       const user=await db.usuarios.findByPk(id,{transaction,lock:transaction.LOCK.UPDATE});
       if(!user||![ROLES.ADMIN,ROLES.SUPERADMIN].includes(user.role))
         throw Object.assign(new Error("Administrador no encontrado."),{status:404});
@@ -92,6 +151,14 @@ exports.setActive = async (req,res) => {
       await db.adminAudit.create({actorUserId:req.auth.userId,targetUserId:id,
         action:req.body.isActive?"admin_reactivated":"admin_deactivated",
         details:{before:previous,after:req.body.isActive}}, {transaction});
+      for (const associationId of associationIds) {
+        await db.adminAudit.create({
+          actorUserId: req.auth.userId,
+          targetUserId: id,
+          action: req.body.isActive ? "association_admin_account_reactivated" : "association_admin_account_deactivated",
+          details: { associationId, before: previous, after: req.body.isActive },
+        }, { transaction });
+      }
       return user;
     });
     return res.json({administrador:safeAccount(account)});
