@@ -28,3 +28,10 @@ test("las invitaciones vencidas se marcan al consultar el listado",()=>{
  const source=read("app/controllers/association-invitations.controller.js");
  assert.match(source,/status:"expired"/);assert.match(source,/expiresAt:\{\[Op\.lte\]:now\}/);
 });
+
+test("el listado de usuarios incluye estado de membresía por asociación", () => {
+  const controller = read("app/controllers/users-management.controller.js");
+  assert.match(controller, /associationMemberships\.findAll/);
+  assert.match(controller, /associationName/);
+  assert.match(controller, /membershipsByUser/);
+});
