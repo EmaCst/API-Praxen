@@ -45,7 +45,9 @@ Se reutiliza `admin_audit_logs`. Se registran:
 - `association_admin_request_approved`
 - `association_admin_request_rejected`
 - `association_admin_revoked`
+- `association_admin_account_deactivated`
+- `association_admin_account_reactivated`
 
 Cada evento incluye actor, cuenta afectada, asociación y, cuando corresponde, identificador de solicitud. Las decisiones y la actualización de membresía se guardan dentro de una sola transacción. Los administradores solo pueden consultar eventos de asociaciones donde mantienen una membresía activa; el superadmin puede consultar cualquier asociación.
 
-No se almacenan contraseñas, tokens ni secretos en el registro.
+La desactivación o reactivación global de una cuenta administrativa también se registra en cada asociación donde mantiene una membresía activa. No se almacenan contraseñas, tokens ni secretos en el registro.
