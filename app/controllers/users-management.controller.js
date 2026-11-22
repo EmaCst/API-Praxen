@@ -47,7 +47,29 @@ exports.list = async (req, res) => {
       order: [["createdAt", "DESC"], ["id", "DESC"]],
       limit, offset,
     });
-    return res.json({ total: count, limit, offset, usuarios: rows });
+    const userIds = rows.map(user => user.id);
+    const memberships = userIds.length ? await db.associationMemberships.findAll({
+      where: { userId: { [Op.in]: userIds } },
+      attributes: ["userId", "associationId", "isActive"],
+      include: [{ model: db.associations, as: "asociacion", attributes: ["id", "name"] }],
+      order: [["associationId", "ASC"]],
+    }) : [];
+    const membershipsByUser = new Map();
+    for (const membership of memberships) {
+      const plain = typeof membership.get === "function" ? membership.get({ plain: true }) : membership;
+      const list = membershipsByUser.get(plain.userId) || [];
+      list.push({
+        associationId: plain.associationId,
+        associationName: plain.asociacion?.name || "Asociación",
+        isActive: plain.isActive !== false,
+      });
+      membershipsByUser.set(plain.userId, list);
+    }
+    const usuarios = rows.map(user => {
+      const plain = typeof user.get === "function" ? user.get({ plain: true }) : user;
+      return { ...plain, memberships: membershipsByUser.get(plain.id) || [] };
+    });
+    return res.json({ total: count, limit, offset, usuarios });
   } catch (error) { return fail(res, error); }
 };
 
