@@ -93,5 +93,6 @@ test("desactivar un admin revoca su JWT; superadmin no se puede desactivar",asyn
   assert.equal((await call("/api/admin/resultados/metricas",target.id)).status,401);
   assert.equal((await call(`/api/admin/administradores/${target.id}/estado`,11,"PATCH",{isActive:true})).status,200);
   assert.equal((await call("/api/admin/resultados/metricas",target.id)).status,200);
-  assert.equal(audit.at(-1).action,"admin_reactivated");
+  assert.ok(audit.some(item=>item.action==="admin_reactivated"));
+  assert.equal(audit.at(-1).action,"association_admin_account_reactivated");
 });
