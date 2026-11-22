@@ -30,7 +30,9 @@ router.get("/asociaciones/:associationId", requirePermission(PERMISSIONS.ASSOCIA
 router.patch("/asociaciones/:associationId", requirePermission(PERMISSIONS.ASSOCIATIONS_MANAGE), adminMutationLimit, associations.update);
 router.patch("/asociaciones/:associationId/estado", requirePermission(PERMISSIONS.ASSOCIATIONS_MANAGE), adminMutationLimit, associations.setActive);
 
-router.post("/asociaciones/:associationId/invitaciones",requirePermission(PERMISSIONS.ASSOCIATION_INVITATIONS_MANAGE),adminMutationLimit,invitations.create);\nrouter.get("/asociaciones/:associationId/invitaciones",requirePermission(PERMISSIONS.ASSOCIATION_INVITATIONS_MANAGE),invitations.list);\nrouter.delete("/asociaciones/:associationId/invitaciones/:invitationId",requirePermission(PERMISSIONS.ASSOCIATION_INVITATIONS_MANAGE),adminMutationLimit,invitations.revoke);
+router.post("/asociaciones/:associationId/invitaciones",requirePermission(PERMISSIONS.ASSOCIATION_INVITATIONS_MANAGE),adminMutationLimit,invitations.create);
+router.get("/asociaciones/:associationId/invitaciones",requirePermission(PERMISSIONS.ASSOCIATION_INVITATIONS_MANAGE),invitations.list);
+router.delete("/asociaciones/:associationId/invitaciones/:invitationId",requirePermission(PERMISSIONS.ASSOCIATION_INVITATIONS_MANAGE),adminMutationLimit,invitations.revoke);
 router.get("/grupos",requirePermission(PERMISSIONS.GROUPS_READ),groups.list);
 router.get("/grupos/:groupId/usuarios",requirePermission(PERMISSIONS.GROUPS_READ),groups.members);
 router.post("/grupos",requirePermission(PERMISSIONS.GROUPS_MANAGE),adminMutationLimit,groups.create);
