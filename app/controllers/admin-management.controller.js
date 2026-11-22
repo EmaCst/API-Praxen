@@ -130,6 +130,15 @@ exports.setActive = async (req,res) => {
   if(id===req.auth.userId) return res.status(403).json({message:"No puedes cambiar tu propia cuenta."});
   try {
     const account=await db.sequelize.transaction(async transaction => {
+      const memberships = await db.associationMemberships.findAll({
+        where: { userId: id, isActive: true },
+        attributes: ["associationId"],
+        transaction,
+      });
+      const associationIds = [...new Set(memberships.map(item => Number(item.associationId)))].sort((a,b)=>a-b);
+      for (const associationId of associationIds) {
+        await db.associations.findByPk(associationId, { transaction, lock: transaction.LOCK.UPDATE });
+      }
       const user=await db.usuarios.findByPk(id,{transaction,lock:transaction.LOCK.UPDATE});
       if(!user||![ROLES.ADMIN,ROLES.SUPERADMIN].includes(user.role))
         throw Object.assign(new Error("Administrador no encontrado."),{status:404});
@@ -142,6 +151,14 @@ exports.setActive = async (req,res) => {
       await db.adminAudit.create({actorUserId:req.auth.userId,targetUserId:id,
         action:req.body.isActive?"admin_reactivated":"admin_deactivated",
         details:{before:previous,after:req.body.isActive}}, {transaction});
+      for (const associationId of associationIds) {
+        await db.adminAudit.create({
+          actorUserId: req.auth.userId,
+          targetUserId: id,
+          action: req.body.isActive ? "association_admin_account_reactivated" : "association_admin_account_deactivated",
+          details: { associationId, before: previous, after: req.body.isActive },
+        }, { transaction });
+      }
       return user;
     });
     return res.json({administrador:safeAccount(account)});
