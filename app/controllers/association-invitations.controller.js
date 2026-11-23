@@ -22,6 +22,7 @@ exports.create=async(req,res)=>{
   const result=await db.sequelize.transaction(async transaction=>{
    const association=await db.associations.findByPk(associationId,{transaction,lock:transaction.LOCK.UPDATE});
    if(!association||association.isActive===false)throw fail(404,"Asociación no encontrada o inactiva.");
+   if(association.slug==="asociacion-inicial")throw fail(409,"La Asociación Pública es un directorio y no admite membresías ni invitaciones.");
    await assertAssociationAccess(req,associationId);
    const target=await db.usuarios.findOne({where:{username:invitedUsername},transaction});
    if(!target||target.role!==ROLES.ATHLETE||target.isActive===false)throw fail(404,"No existe una cuenta activa de deportista con ese usuario.");
