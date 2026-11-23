@@ -376,6 +376,25 @@ test("el admin queda aislado a sus asociaciones incluso manipulando filtros e ID
   } finally { membership.isActive = true; }
 });
 
+
+test("un deportista con membresías activas en A y B comparte un único historial", async () => {
+  const membershipB = { userId: 1, associationId: 2, isActive: true };
+  associationMemberships.push(membershipB);
+  try {
+    const adminA = await get("/api/admin/resultados/resumen?athleteId=1", adminToken(10));
+    const adminB = await get("/api/admin/resultados/resumen?athleteId=1", adminToken(11));
+    assert.equal(adminA.status, 200);
+    assert.equal(adminB.status, 200);
+    assert.equal(adminA.data.summary.totalSessions, 2);
+    assert.equal(adminB.data.summary.totalSessions, 2);
+    assert.equal(adminA.data.summary.athleteCount, 1);
+    assert.equal(adminB.data.summary.athleteCount, 1);
+  } finally {
+    const index = associationMemberships.indexOf(membershipB);
+    if (index >= 0) associationMemberships.splice(index, 1);
+  }
+});
+
 test("login distingue público app frente a panel administrativo", async () => {
   const response = await fetch(base + "/api/auth/login", {
     method: "POST", headers: { "Content-Type": "application/json" },
