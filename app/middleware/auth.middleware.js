@@ -60,17 +60,11 @@ module.exports = async function authenticate(req, res, next) {
       });
       const membershipIds = [...new Set(memberships.map(item => Number(item.associationId))
         .filter(id => Number.isSafeInteger(id) && id > 0))];
-      if (!membershipIds.length) {
-        return res.status(403).json({ message: "Tu cuenta no tiene una asociación activa asignada." });
-      }
       const activeAssociations = await db.associations.findAll({
         where: { id: { [Op.in]: membershipIds }, isActive: true },
         attributes: ["id"],
       });
       associationIds = [...new Set(activeAssociations.map(item => Number(item.id)))];
-      if (!associationIds.length) {
-        return res.status(403).json({ message: "Tu cuenta no tiene una asociación activa asignada." });
-      }
       const preferred = Number(user.activeAssociationId);
       if (Number.isSafeInteger(preferred) && associationIds.includes(preferred)) {
         activeAssociationId = preferred;
