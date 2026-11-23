@@ -91,6 +91,7 @@ exports.acceptAssociationInvitation = async (req, res) => {
       if (!user || user.role !== ROLES.ATHLETE || user.username !== invitation.invitedUsername) throw Object.assign(new Error("Esta invitación fue emitida para otra cuenta."), { status: 403 });
       const association = await db.associations.findByPk(invitation.associationId, { transaction });
       if (!association || association.isActive === false) throw Object.assign(new Error("La asociación ya no está disponible."), { status: 410 });
+      if (association.slug === "asociacion-inicial") throw Object.assign(new Error("La Asociación Pública es un directorio y no admite membresías."), { status: 409 });
       await db.associationMemberships.upsert({ userId: user.id, associationId: association.id, isActive: true, createdByUserId: invitation.createdByUserId }, { transaction });
       // Memberships are the source of truth for association access. Keep the legacy
       // athletes.association_id untouched so joining another association never
