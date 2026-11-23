@@ -73,7 +73,7 @@ function filterSessions(query) {
       if (includeWhere.federacion && athlete?.federacion !== includeWhere.federacion) return false;
       const membershipQuery = includeWhere.userId?.[Op.in];
       if (typeof membershipQuery === "string") {
-        const ids = membershipQuery.match(/association_id IN \\(([^)]+)\\)/)?.[1]
+        const ids = membershipQuery.match(/association_id IN \(([^)]+)\)/)?.[1]
           ?.split(",").map(Number) || [];
         if (!associationMemberships.some(item => item.userId === athlete?.userId &&
             item.isActive && ids.includes(item.associationId))) return false;
@@ -132,7 +132,7 @@ require.cache[modelPath] = {
         else if (where?.federacion?.[Op.not] === null) selected = selected.filter(a => a.federacion !== null);
         if (where?.associationId) selected = selected.filter(a => where.associationId[Op.in].includes(a.associationId));
         if (typeof where?.userId?.[Op.in] === "string") {
-          const ids = where.userId[Op.in].match(/association_id IN \\(([^)]+)\\)/)?.[1]?.split(",").map(Number) || [];
+          const ids = where.userId[Op.in].match(/association_id IN \(([^)]+)\)/)?.[1]?.split(",").map(Number) || [];
           selected = selected.filter(a => associationMemberships.some(m =>
             m.userId === a.userId && m.isActive && ids.includes(m.associationId)));
         }
@@ -153,7 +153,7 @@ require.cache[modelPath] = {
           (!where.id || a.id === where.id) &&
           (!where.associationId || where.associationId[Op.in].includes(a.associationId)));
         if (typeof where.userId?.[Op.in] === "string") {
-          const ids = where.userId[Op.in].match(/association_id IN \\(([^)]+)\\)/)?.[1]?.split(",").map(Number) || [];
+          const ids = where.userId[Op.in].match(/association_id IN \(([^)]+)\)/)?.[1]?.split(",").map(Number) || [];
           selected = selected.filter(a => associationMemberships.some(m =>
             m.userId === a.userId && m.isActive && ids.includes(m.associationId)));
         }
