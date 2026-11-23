@@ -145,14 +145,14 @@ exports.assign = async (req, res) => {
     const userId = id(req.body?.userId);
     const user = await db.usuarios.findByPk(userId);
     if (!user || user.role !== ROLES.ATHLETE) throw bad("Solo se pueden asignar cuentas de deportistas.", 400);
-    const [athlete, membership] = await Promise.all([
+    const [athlete, activeMembership] = await Promise.all([
       db.atletas.findOne({ where: { userId }, attributes: ["id"] }),
       db.associationMemberships.findOne({
         where: { userId, associationId: group.associationId, isActive: true },
         attributes: ["userId"],
       }),
     ]);
-    if (!athlete || !membership) throw bad("El deportista no pertenece activamente a la asociación de este grupo.", 400);
+    if (!athlete || !activeMembership) throw bad("El deportista no pertenece activamente a la asociación de este grupo.", 400);
     const [membership, created] = await db.userGroups.findOrCreate({
       where: { groupId: group.id, userId }, defaults: { groupId: group.id, userId },
     });
