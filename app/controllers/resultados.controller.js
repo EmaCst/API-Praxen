@@ -173,6 +173,7 @@ admin.athletes = async (req, res) => {
       whereFilter.userId = { [Op.in]: db.sequelize.literal(
         "(SELECT ug.user_id FROM user_groups ug INNER JOIN association_memberships am ON am.user_id = ug.user_id " +
         "WHERE ug.group_id = " + Number(filters.groupId) +
+        " AND am.association_id = " + Number(group.associationId) +
         (Array.isArray(associationIds) ? " AND am.association_id IN (" + associationIds.map(Number).join(",") + ")" : "") +
         " AND am.is_active = TRUE)"
       ) };
