@@ -72,11 +72,7 @@ exports.list = async (req, res) => {
       })).map(item => Number(item.id))
       : associationIds;
     const whereGroup = {
-      ...(search ? { nombre: { [Op.iLike]: "%" + search.replace(/[\\%_]/g, "\\    const associationIds = await resolveAssociationIds(req, req.query.associationId);
-    const whereGroup = {
       ...(search ? { nombre: { [Op.iLike]: "%" + search.replace(/[\\%_]/g, "\\$&") + "%" } } : {}),
-      ...(associationIds ? { associationId: { [Op.in]: associationIds } } : {}),
-    };") + "%" } } : {}),
       associationId: { [Op.in]: visibleAssociationIds },
     };
     const { count, rows } = await db.groups.findAndCountAll({
