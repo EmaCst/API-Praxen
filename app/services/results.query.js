@@ -89,19 +89,19 @@ function parseFilters(query, { admin = false, list = false } = {}) {
 
 async function assertAthlete(athleteId, userId, associationIds = null, req = null) {
   const where = userId ? { id: athleteId, userId } : { id: athleteId };
-  if (Array.isArray(associationIds)) where.associationId = { [Op.in]: associationIds };
   const athlete = await db.atletas.findOne({
     where,
-    attributes: ["id", "nombre", "federacion", "associationId"],
+    attributes: ["id", "nombre", "federacion", "associationId", "userId"],
   });
-  if (!athlete) {
-    if (Array.isArray(associationIds) && typeof db.atletas.findByPk === "function") {
-      const outside = await db.atletas.findByPk(athleteId, { attributes: ["id", "associationId"] });
-      if (outside && !associationIds.includes(Number(outside.associationId))) {
-        await recordDeniedAssociationAccess(req, outside.associationId, "athlete_outside_membership");
-      }
+  if (!athlete) throw new ResultsError(404, "Atleta no encontrado.");
+  if (Array.isArray(associationIds)) {
+    const membership = athlete.userId ? await db.associationMemberships.findOne({
+      where: { userId: athlete.userId, associationId: { [Op.in]: associationIds }, isActive: true },
+    }) : null;
+    if (!membership) {
+      await recordDeniedAssociationAccess(req, associationIds[0], "athlete_outside_active_membership");
+      throw new ResultsError(404, "Atleta no encontrado.");
     }
-    throw new ResultsError(404, "Atleta no encontrado.");
   }
   return athlete;
 }
@@ -137,9 +137,6 @@ async function buildScope(filters, {
   if (filters.athleteId) {
     const athlete = await assertAthlete(filters.athleteId, null, associationIds, req);
     if (filters.groupId) {
-      if (Number(athlete.associationId) !== Number(group.associationId)) {
-        throw new ResultsError(404, "El atleta no pertenece al grupo.");
-      }
       const inGroup = athlete.userId
         ? await db.userGroups.findOne({ where: { groupId: filters.groupId, userId: athlete.userId } })
         : null;
@@ -174,10 +171,17 @@ function makeQuery(filters, scope) {
     model: db.atletas, as: "atleta",
     attributes: ["id", "nombre", "federacion"],
     where: {
-      ...(scope.type === "group" ? { associationId: scope.groupAssociationId } :
-        Array.isArray(scope.associationIds) ? { associationId: { [Op.in]: scope.associationIds } } : {}),
       ...(scope.federation ? { federacion: scope.federation } : {}),
-      ...(scope.type === "group" ? {
+      ...(Array.isArray(scope.associationIds) ? {
+        userId: { [Op.in]: db.sequelize.literal(
+          scope.type === "group"
+            ? "(SELECT ug.user_id FROM user_groups ug INNER JOIN association_memberships am ON am.user_id = ug.user_id WHERE ug.group_id = " +
+              Number(scope.groupId) + " AND am.association_id IN (" +
+              scope.associationIds.map(Number).join(",") + ") AND am.is_active = TRUE)"
+            : "(SELECT user_id FROM association_memberships WHERE association_id IN (" +
+              scope.associationIds.map(Number).join(",") + ") AND is_active = TRUE)"
+        ) },
+      } : scope.type === "group" ? {
         userId: { [Op.in]: db.sequelize.literal(
           "(SELECT user_id FROM user_groups WHERE group_id = " + Number(scope.groupId) + ")",
         ) },
