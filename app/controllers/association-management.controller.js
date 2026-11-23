@@ -176,6 +176,7 @@ exports.assignAdmin = async (req, res) => {
     const result = await db.sequelize.transaction(async transaction => {
       const association = await db.associations.findByPk(associationId, { transaction, lock: transaction.LOCK.UPDATE });
       if (!association || association.isActive === false) throw error(404, "Asociación no encontrada o inactiva.");
+      if (association.slug === "asociacion-inicial") throw error(409, "La Asociación Pública es un directorio y no admite administradores por membresía.");
       const user = await db.usuarios.findByPk(userId, { transaction, lock: transaction.LOCK.UPDATE });
       if (!user || user.role !== ROLES.ADMIN || user.isActive === false) {
         throw error(404, "Administrador activo no encontrado.");
