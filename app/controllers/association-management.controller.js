@@ -237,6 +237,14 @@ exports.revokeAdmin = async (req, res) => {
       if (!membership) throw error(404, "Membresía de administrador no encontrada.");
       const user = await db.usuarios.findByPk(userId, { transaction, lock: transaction.LOCK.UPDATE });
       if (!user || user.role !== ROLES.ADMIN) throw error(404, "Administrador no encontrado.");
+      const activeRows = await db.associationMemberships.findAll({
+        where: { associationId, isActive: true }, attributes: ["userId"], transaction,
+      });
+      const activeIds = [...new Set(activeRows.map(item => Number(item.userId)))];
+      const activeAdmins = activeIds.length ? await db.usuarios.count({
+        where: { id: { [Op.in]: activeIds }, role: ROLES.ADMIN, isActive: true }, transaction,
+      }) : 0;
+      if (activeAdmins <= 1) throw error(409, "No se puede retirar al último administrador activo de la asociación.");
       await membership.update({ isActive: false }, { transaction });
       const remaining = await db.associationMemberships.findAll({
         where: { userId, isActive: true }, attributes: ["associationId"], transaction,
