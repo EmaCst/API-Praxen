@@ -22,6 +22,7 @@ const publicAdmin = user => ({
   createdAt: user.createdAt,
 });
 const error = (status, message) => Object.assign(new Error(message), { status });
+const isPublicDirectory = association => association?.slug === "asociacion-inicial";
 const parseId = value => {
   const id = Number(value);
   return Number.isSafeInteger(id) && id > 0 ? id : null;
@@ -105,6 +106,7 @@ exports.update = async (req, res) => {
     const association = await db.sequelize.transaction(async transaction => {
       const target = await db.associations.findByPk(id, { transaction, lock: transaction.LOCK.UPDATE });
       if (!target) throw error(404, "Asociación no encontrada.");
+      if (isPublicDirectory(target) && body.slug !== undefined && body.slug !== target.slug) throw error(409, "No se puede cambiar el identificador interno de la Asociación Pública.");
       const before = { name: target.name, slug: target.slug };
       const changes = {};
       if (body.name !== undefined) changes.name = body.name.trim();
@@ -129,6 +131,7 @@ exports.setActive = async (req, res) => {
     const association = await db.sequelize.transaction(async transaction => {
       const target = await db.associations.findByPk(id, { transaction, lock: transaction.LOCK.UPDATE });
       if (!target) throw error(404, "Asociación no encontrada.");
+      if (isPublicDirectory(target) && req.body.isActive === false) throw error(409, "La Asociación Pública no se puede desactivar.");
       if (target.isActive === req.body.isActive) return target;
       if (!req.body.isActive) {
         const activeCount = await db.associations.count({ where: { isActive: true }, transaction });
@@ -153,6 +156,7 @@ exports.listAdmins = async (req, res) => {
   try {
     const association = await db.associations.findByPk(associationId);
     if (!association) return res.status(404).json({ message: "Asociación no encontrada." });
+    if (isPublicDirectory(association)) return res.status(409).json({ message: "La Asociación Pública no administra miembros ni administradores." });
     const memberships = await db.associationMemberships.findAll({
       where: { associationId },
       order: [["createdAt", "ASC"]],
@@ -231,6 +235,7 @@ exports.revokeAdmin = async (req, res) => {
         transaction, lock: transaction.LOCK.UPDATE,
       });
       if (!association) throw error(404, "Asociación no encontrada.");
+      if (isPublicDirectory(association)) throw error(409, "La Asociación Pública no administra administradores.");
       const membership = await db.associationMemberships.findOne({
         where: { userId, associationId, isActive: true }, transaction, lock: transaction.LOCK.UPDATE,
       });
