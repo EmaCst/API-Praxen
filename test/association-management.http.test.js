@@ -205,6 +205,8 @@ test("superadmin puede asignar y revocar membresía de admin sin borrar la cuent
   assert.equal(listed.status, 200);
   assert.equal(listed.data.administradores[0].id, 20);
 
+  memberships.push({ userId: 10, associationId: 3, isActive: true,
+    update: async function(v) { Object.assign(this, v); return this; } });
   const revoked = await call("/api/admin/asociaciones/3/administradores/20", 12, "DELETE");
   assert.equal(revoked.status, 200);
   assert.equal(users.has(20), true);
