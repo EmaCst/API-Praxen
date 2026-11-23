@@ -1,62 +1,39 @@
 # Invitaciones a asociaciones
 
 ## Modelo de acceso
+El registro público crea una cuenta general de Praxen. Tener cuenta y tener membresía institucional son conceptos distintos. La afiliación se concede por invitación de un administrador autorizado.
 
-El registro público crea una cuenta general de Praxen. Tener cuenta y tener membresía institucional son conceptos distintos. Una cuenta general no recibe automáticamente una membresía ni acceso a los datos privados de una asociación.
-
-La afiliación se concede por invitación de un administrador autorizado. El rol de la cuenta sigue siendo independiente de su membresía.
-
-## Flujo inicial de invitación
-
-1. Un administrador de la asociación invita una cuenta de deportista existente mediante su nombre de usuario.
-2. La API comprueba que el administrador tenga membresía activa en esa asociación (un superadmin puede operar globalmente).
-3. La API genera un token aleatorio de un solo uso, guarda únicamente su hash y devuelve el token al administrador una sola vez para que lo comparta por el canal acordado.
-4. El deportista inicia sesión con su cuenta y acepta la invitación mediante `POST /api/auth/accept-invitation`.
-5. La API valida el token, el nombre de usuario destinatario, el estado y la expiración; crea/reactiva la membresía y asocia su perfil de atleta a la organización.
-6. Las invitaciones caducan a los siete días. Los tokens se almacenan como SHA-256 y no se devuelven nuevamente.
+## Flujo
+1. Un administrador invita una cuenta de deportista existente por nombre de usuario.
+2. La API valida su membresía activa en la asociación (el superadmin tiene alcance global).
+3. Se genera un token aleatorio de un solo uso; la base guarda únicamente su hash SHA-256 y el token se muestra una sola vez.
+4. El deportista autenticado acepta mediante `POST /api/auth/accept-invitation`.
+5. La API valida destinatario, estado y vencimiento; crea/reactiva la membresía y vincula el perfil del atleta.
+6. Las invitaciones vencen a los siete días.
 
 ## Endpoints
-
-### Crear invitación
-
+### Crear
 `POST /api/admin/asociaciones/:associationId/invitaciones`
 
-Requiere token de administrador del panel.
+Entrada: `{ "username": "usuario_destino" }`. Devuelve metadatos y token de un solo uso. No envía correo automáticamente.
 
-Entrada:
+### Listar
+`GET /api/admin/asociaciones/:associationId/invitaciones?status=pending&limit=25&offset=0`
 
-```json
-{ "username": "usuario_destino" }
-```
+Estados admitidos: `pending`, `accepted`, `expired`, `revoked`. La respuesta es paginada e incluye destinatario, estado, fechas y creador/revocador. Nunca incluye token ni hash. Las pendientes vencidas se actualizan a `expired` al consultar.
 
-Respuesta 201: metadatos de invitación y token de un solo uso. El administrador debe compartirlo con el usuario destinatario. No se envía correo automáticamente en esta primera etapa.
+### Revocar
+`DELETE /api/admin/asociaciones/:associationId/invitaciones/:invitationId`
 
-### Aceptar invitación
+Solo se revocan invitaciones pendientes y vigentes. Se registra quién revocó y cuándo; también se agrega un evento a `admin_audit_logs` cuando la cuenta destinataria existe. Las aceptadas, vencidas o ya revocadas no se pueden revocar.
 
+### Aceptar
 `POST /api/auth/accept-invitation`
 
-Requiere sesión autenticada de deportista.
+Requiere sesión de deportista y recibe `{ "token": "..." }`. Solo puede aceptar la cuenta cuyo username fue invitado y el token no se puede reutilizar.
 
-Entrada:
-
-```json
-{ "token": "token_recibido_del_administrador" }
-```
-
-La invitación solo puede aceptarse desde la cuenta cuyo nombre de usuario fue invitado. Una vez aceptada, no puede reutilizarse.
-
-## Limitaciones deliberadas de esta etapa
-
-- No se implementa envío de correo/SMS ni generación de carnet/QR todavía.
-- El administrador invita una cuenta ya registrada por su username; la invitación no crea cuentas automáticamente.
-- La interfaz web para gestionar invitaciones queda para un issue independiente de Praxen Web.
-- La vista analítica de usuarios generales frente a miembros institucionales queda fuera de esta PR.
-
-## Seguridad y operación
-
-- El token completo se muestra una sola vez al crear la invitación.
-- La base conserva únicamente el hash SHA-256 del token.
-- Se valida que el administrador pertenezca a la asociación solicitada.
-- Se valida que el destinatario sea una cuenta activa con rol de deportista.
-- La aceptación y el cambio de membresía ocurren dentro de una transacción.
-- Las invitaciones expiran después de siete días.
+## Seguridad
+- Los administradores solo consultan y revocan invitaciones de asociaciones donde tienen membresía activa; el servidor valida el alcance.
+- Solo se invita a cuentas activas con rol de deportista.
+- La aceptación y actualización de membresía se realizan en una transacción.
+- No se implementan correo/SMS ni carnet/QR en esta etapa.
