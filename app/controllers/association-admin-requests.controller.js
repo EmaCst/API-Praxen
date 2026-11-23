@@ -122,6 +122,7 @@ exports.list = async (req, res) => {
   try {
     const association = await db.associations.findByPk(associationId);
     if (!association || association.isActive === false) throw fail(404, "Asociación no encontrada o inactiva.");
+    if (association.slug === "asociacion-inicial") throw fail(409, "La Asociación Pública no administra solicitudes ni auditorías de membresía.");
     await assertAssociationAccess(req, associationId);
     if (req.auth.role === ROLES.ADMIN) {
       await assertReviewer(req, associationId);
