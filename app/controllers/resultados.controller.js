@@ -241,7 +241,12 @@ admin.federationSummary = async (req, res) => {
     const sessions = await loadSessions(makeQuery(filters, { type: "global", associationIds }));
     const athleteRows = await db.atletas.findAll({
       attributes: ["id", "federacion"],
-      ...(associationIds ? { where: { associationId: { [Op.in]: associationIds } } } : {}),
+      ...(Array.isArray(associationIds) ? { where: {
+        userId: { [Op.in]: db.sequelize.literal(
+          "(SELECT user_id FROM association_memberships WHERE association_id IN (" +
+          associationIds.map(Number).join(",") + ") AND is_active = TRUE)"
+        ) },
+      } } : {}),
     });
     const federationById = new Map(athleteRows.map(row => [Number(row.id), row.federacion]));
     const buckets = new Map();
