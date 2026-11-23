@@ -42,14 +42,19 @@ async function findAccessibleGroup(req, rawId) {
 }
 async function resolveCreateAssociation(req, rawAssociationId) {
   const ids = await resolveAssociationIds(req, rawAssociationId);
+  let associationId;
   if (ids === null) {
-    if (rawAssociationId !== undefined) return Number(rawAssociationId);
-    const association = await getDefaultAssociation();
-    return association.id;
+    if (rawAssociationId !== undefined) associationId = Number(rawAssociationId);
+    else associationId = (await getDefaultAssociation()).id;
+  } else if (ids.length === 1) associationId = ids[0];
+  else {
+    if (rawAssociationId === undefined) throw bad("Debes indicar associationId cuando tienes acceso a varias asociaciones.");
+    associationId = ids[0];
   }
-  if (ids.length === 1) return ids[0];
-  if (rawAssociationId === undefined) throw bad("Debes indicar associationId cuando tienes acceso a varias asociaciones.");
-  return ids[0];
+  const association = await db.associations.findByPk(associationId);
+  if (!association || association.isActive === false) throw bad("Asociación no encontrada o inactiva.", 404);
+  if (association.slug === "asociacion-inicial") throw bad("La Asociación Pública es un directorio y no admite grupos.", 409);
+  return associationId;
 }
 
 exports.list = async (req, res) => {
@@ -114,11 +119,11 @@ exports.members = async (req, res) => {
       where: { groupId: group.id }, order: [["assignedAt", "ASC"]],
     });
     const memberIds = memberships.map(item => item.userId);
-    const athleteProfiles = memberIds.length ? await db.atletas.findAll({
-      where: { userId: { [Op.in]: memberIds }, associationId: group.associationId },
+    const activeMemberships = memberIds.length ? await db.associationMemberships.findAll({
+      where: { userId: { [Op.in]: memberIds }, associationId: group.associationId, isActive: true },
       attributes: ["userId"],
     }) : [];
-    const validIds = [...new Set(athleteProfiles.map(athlete => athlete.userId))];
+    const validIds = [...new Set(activeMemberships.map(item => item.userId))];
     const users = validIds.length ? await db.usuarios.findAll({
       where: { id: { [Op.in]: validIds }, role: ROLES.ATHLETE },
       attributes: ["id", "nombre", "username"],
@@ -140,10 +145,14 @@ exports.assign = async (req, res) => {
     const userId = id(req.body?.userId);
     const user = await db.usuarios.findByPk(userId);
     if (!user || user.role !== ROLES.ATHLETE) throw bad("Solo se pueden asignar cuentas de deportistas.", 400);
-    const athlete = await db.atletas.findOne({
-      where: { userId, associationId: group.associationId }, attributes: ["id"],
-    });
-    if (!athlete) throw bad("El deportista no pertenece a la asociación de este grupo.", 400);
+    const [athlete, membership] = await Promise.all([
+      db.atletas.findOne({ where: { userId }, attributes: ["id"] }),
+      db.associationMemberships.findOne({
+        where: { userId, associationId: group.associationId, isActive: true },
+        attributes: ["userId"],
+      }),
+    ]);
+    if (!athlete || !membership) throw bad("El deportista no pertenece activamente a la asociación de este grupo.", 400);
     const [membership, created] = await db.userGroups.findOrCreate({
       where: { groupId: group.id, userId }, defaults: { groupId: group.id, userId },
     });
