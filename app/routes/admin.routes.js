@@ -10,12 +10,16 @@ const groups=require("../controllers/groups.controller");
 const users=require("../controllers/users-management.controller");
 const invitations=require("../controllers/association-invitations.controller");
 const adminRequests=require("../controllers/association-admin-requests.controller");
+const memberships=require("../controllers/association-memberships.controller");
 const { rateLimit } = require("express-rate-limit");
 const adminMutationLimit = rateLimit({ windowMs:15*60*1000,limit:15,standardHeaders:"draft-7",legacyHeaders:false });
 
 // Association discovery and context selection are available to scoped admins.
 // Only the global superadmin can create/update/deactivate associations or assign admins.
 router.get("/asociaciones", requirePermission(PERMISSIONS.ASSOCIATIONS_READ), associations.list);
+router.get("/directorio/deportistas", requirePermission(PERMISSIONS.ATHLETES_LIST), associations.directoryAthletes);
+router.delete("/asociaciones/:associationId/membresia", adminMutationLimit, memberships.leaveOwn);
+router.delete("/asociaciones/:associationId/deportistas/:athleteId", requirePermission(PERMISSIONS.ATHLETES_LIST), adminMutationLimit, memberships.removeAthlete);
 router.get("/contexto-asociacion", requirePermission(PERMISSIONS.ASSOCIATION_CONTEXT_MANAGE), associationContext.get);
 router.put("/contexto-asociacion", requirePermission(PERMISSIONS.ASSOCIATION_CONTEXT_MANAGE), adminMutationLimit, associationContext.select);
 router.post("/asociaciones", requirePermission(PERMISSIONS.ASSOCIATIONS_MANAGE), adminMutationLimit, associations.create);
