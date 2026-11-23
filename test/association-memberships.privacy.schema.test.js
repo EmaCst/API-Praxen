@@ -46,7 +46,7 @@ test("la Asociación Pública no concede membresías ni permite grupos", () => {
   const migration = read("app/db/migrations/012-public-association-directory.sql");
   const invitations = read("app/controllers/association-invitations.controller.js");
   const groups = read("app/controllers/groups.controller.js");
-  assert.match(migration, /association-inicial/);
+  assert.match(migration, /asociacion-inicial/);
   assert.match(migration, /SET is_active = FALSE/i);
   assert.doesNotMatch(migration, /DROP TABLE|DELETE FROM/i);
   assert.match(invitations, /La Asociación Pública es un directorio/);
