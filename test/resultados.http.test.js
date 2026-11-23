@@ -15,6 +15,7 @@ const accounts = new Map([
   [10, { id: 10, nombre: "Directora", username: "directora", role: "admin", passwordHash: null }],
   [11, { id: 11, nombre: "Director B", username: "director-b", role: "admin", passwordHash: null }],
   [12, { id: 12, nombre: "Principal", username: "principal", role: "superadmin", passwordHash: null }],
+  [13, { id: 13, nombre: "Admin sin asociación", username: "admin-sin-asociacion", role: "admin", passwordHash: null }],
 ]);
 for (const user of accounts.values()) { user.tokenVersion = 0; user.mustChangePassword = false; }
 const athletes = [
@@ -107,7 +108,7 @@ require.cache[modelPath] = {
     },
     associations: {
       findOne: async () => ({ id: 1, slug: "asociacion-inicial", isActive: true }),
-      findAll: async ({where}) => [{id:1},{id:2}].filter(a => where.id[Op.in].includes(a.id) && where.isActive === true),
+      findAll: async ({where}) => [{id:1},{id:2}].filter(a => where.isActive === true && (!where.id || where.id[Op.in].includes(a.id))),
       findByPk: async id => [{id:1,isActive:true},{id:2,isActive:true}].find(a=>a.id===id)||null,
     },
     adminAudit: { create: async data => { accessAudit.push(data); return data; } },
@@ -393,6 +394,18 @@ test("un deportista con membresías activas en A y B comparte un único historia
     const index = associationMemberships.indexOf(membershipB);
     if (index >= 0) associationMemberships.splice(index, 1);
   }
+});
+
+
+test("admin sin membresías privadas conserva acceso al directorio, no a estadísticas", async () => {
+  const associations = await get("/api/admin/asociaciones", adminToken(13));
+  assert.equal(associations.status, 200);
+  assert.equal(associations.data.asociaciones.length, 2);
+  const directory = await get("/api/admin/directorio/deportistas", adminToken(13));
+  assert.equal(directory.status, 200);
+  assert.ok(directory.data.total >= 1);
+  const privateStats = await get("/api/admin/resultados/resumen", adminToken(13));
+  assert.equal(privateStats.status, 403);
 });
 
 test("login distingue público app frente a panel administrativo", async () => {
