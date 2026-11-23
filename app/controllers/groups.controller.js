@@ -37,6 +37,8 @@ async function findAccessibleGroup(req, rawId) {
   const groupId = id(rawId);
   const group = await db.groups.findByPk(groupId);
   if (!group) throw bad("Grupo no encontrado.", 404);
+  const association = await db.associations.findByPk(group.associationId);
+  if (!association || association.slug === "asociacion-inicial") throw bad("Grupo no encontrado.", 404);
   await assertAssociationAccess(req, group.associationId, { hideExistence: true });
   return group;
 }
@@ -63,9 +65,19 @@ exports.list = async (req, res) => {
     const search = typeof req.query.search === "string" ? req.query.search.trim() : "";
     if (search.length > 120) throw bad("Búsqueda demasiado larga.");
     const associationIds = await resolveAssociationIds(req, req.query.associationId);
+    const visibleAssociationIds = associationIds === null
+      ? (await db.associations.findAll({
+        where: { isActive: true, slug: { [Op.ne]: "asociacion-inicial" } },
+        attributes: ["id"],
+      })).map(item => Number(item.id))
+      : associationIds;
+    const whereGroup = {
+      ...(search ? { nombre: { [Op.iLike]: "%" + search.replace(/[\\%_]/g, "\\    const associationIds = await resolveAssociationIds(req, req.query.associationId);
     const whereGroup = {
       ...(search ? { nombre: { [Op.iLike]: "%" + search.replace(/[\\%_]/g, "\\$&") + "%" } } : {}),
       ...(associationIds ? { associationId: { [Op.in]: associationIds } } : {}),
+    };") + "%" } } : {}),
+      associationId: { [Op.in]: visibleAssociationIds },
     };
     const { count, rows } = await db.groups.findAndCountAll({
       where: whereGroup, order: [["nombre", "ASC"]], limit, offset,
