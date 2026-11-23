@@ -42,9 +42,9 @@ function sendError(res, e) {
 
 exports.list = async (req, res) => {
   try {
-    const where = req.auth.role === ROLES.SUPERADMIN
-      ? {}
-      : { id: { [Op.in]: req.auth.associationIds || [] }, isActive: true };
+    // Association discovery is a public directory for authenticated admins.
+    // It intentionally exposes association metadata only, never memberships.
+    const where = { isActive: true };
     const rows = await db.associations.findAll({ where, order: [["name", "ASC"], ["id", "ASC"]] });
     return res.json({
       total: rows.length,
@@ -259,6 +259,39 @@ exports.revokeAdmin = async (req, res) => {
       message: "Membresía revocada. La cuenta del administrador se conserva.",
       userId,
       remainingAssociationIds: result.remainingAssociationIds,
+    });
+  } catch (e) { return sendError(res, e); }
+};
+
+ 
+exports.directoryAthletes = async (req, res) => {
+  const limit = req.query.limit === undefined ? 25 : Number(req.query.limit);
+  const offset = req.query.offset === undefined ? 0 : Number(req.query.offset);
+  const search = req.query.search === undefined ? "" : req.query.search;
+  if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100 ||
+      !Number.isSafeInteger(offset) || offset < 0 || offset > 1000000 ||
+      typeof search !== "string" || search.length > 120 ||
+      (search.trim() && search.trim().length < 2)) {
+    return res.status(400).json({ message: "Filtros o paginación del directorio inválidos." });
+  }
+  try {
+    const where = {};
+    if (search.trim()) {
+      const escaped = search.trim().replace(/[\\%_]/g, "\\$&");
+      where.nombre = { [Op.iLike]: "%" + escaped + "%" };
+    }
+    const result = await db.atletas.findAndCountAll({
+      where,
+      attributes: ["id", "nombre", "federacion", "createdAt"],
+      order: [["nombre", "ASC"], ["id", "ASC"]],
+      limit, offset,
+    });
+    return res.json({
+      total: result.count, limit, offset,
+      deportistas: result.rows.map(item => ({
+        id: item.id, nombre: item.nombre, federacion: item.federacion,
+        createdAt: item.createdAt,
+      })),
     });
   } catch (e) { return sendError(res, e); }
 };
