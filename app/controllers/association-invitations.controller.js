@@ -43,6 +43,7 @@ exports.list=async(req,res)=>{
  try{
   const association=await db.associations.findByPk(associationId);
   if(!association||association.isActive===false)throw fail(404,"Asociación no encontrada o inactiva.");
+  if(association.slug==="asociacion-inicial")throw fail(409,"La Asociación Pública no gestiona invitaciones.");
   await assertAssociationAccess(req,associationId);
   const status=req.query.status;
   if(status!==undefined&&!["pending","accepted","revoked","expired"].includes(status))throw fail(400,"El estado solicitado no es válido.");
@@ -61,6 +62,7 @@ exports.revoke=async(req,res)=>{
   const result=await db.sequelize.transaction(async transaction=>{
    const association=await db.associations.findByPk(associationId,{transaction,lock:transaction.LOCK.UPDATE});
    if(!association||association.isActive===false)throw fail(404,"Asociación no encontrada o inactiva.");
+   if(association.slug==="asociacion-inicial")throw fail(409,"La Asociación Pública no gestiona invitaciones.");
    await assertAssociationAccess(req,associationId);
    const invitation=await db.associationInvitations.findOne({where:{id:invitationId,associationId},transaction,lock:transaction.LOCK.UPDATE});
    if(!invitation)throw fail(404,"Invitación no encontrada.");
