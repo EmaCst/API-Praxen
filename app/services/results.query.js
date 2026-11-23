@@ -176,7 +176,7 @@ function makeQuery(filters, scope) {
         userId: { [Op.in]: db.sequelize.literal(
           scope.type === "group"
             ? "(SELECT ug.user_id FROM user_groups ug INNER JOIN association_memberships am ON am.user_id = ug.user_id WHERE ug.group_id = " +
-              Number(scope.groupId) + " AND am.association_id IN (" +
+              Number(scope.groupId) + " AND am.association_id = " + Number(scope.groupAssociationId) + " AND am.association_id IN (" +
               scope.associationIds.map(Number).join(",") + ") AND am.is_active = TRUE)"
             : "(SELECT user_id FROM association_memberships WHERE association_id IN (" +
               scope.associationIds.map(Number).join(",") + ") AND is_active = TRUE)"
