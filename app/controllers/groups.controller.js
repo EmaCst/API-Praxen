@@ -71,11 +71,27 @@ exports.list = async (req, res) => {
       where: whereGroup, order: [["nombre", "ASC"]], limit, offset,
     });
     const groupIds = rows.map(group => group.id);
-    const totals = groupIds.length ? await db.userGroups.findAll({
-      attributes: ["groupId", [fn("COUNT", col("user_id")), "total"]],
-      where: { groupId: { [Op.in]: groupIds } }, group: ["groupId"],
+    const groupMembers = groupIds.length ? await db.userGroups.findAll({
+      attributes: ["groupId", "userId"],
+      where: { groupId: { [Op.in]: groupIds } },
     }) : [];
-    const counts = new Map(totals.map(item => [item.groupId, Number(item.get("total"))]));
+    const memberIds = [...new Set(groupMembers.map(item => Number(item.userId)))];
+    const activeMemberships = memberIds.length ? await db.associationMemberships.findAll({
+      where: {
+        userId: { [Op.in]: memberIds },
+        associationId: { [Op.in]: [...new Set(rows.map(group => Number(group.associationId)))] },
+        isActive: true,
+      },
+      attributes: ["userId", "associationId"],
+    }) : [];
+    const activeKeys = new Set(activeMemberships.map(item => Number(item.userId) + ":" + Number(item.associationId)));
+    const counts = new Map();
+    for (const member of groupMembers) {
+      const group = rows.find(item => Number(item.id) === Number(member.groupId));
+      if (group && activeKeys.has(Number(member.userId) + ":" + Number(group.associationId))) {
+        counts.set(group.id, (counts.get(group.id) || 0) + 1);
+      }
+    }
     return res.json({
       total: count, limit, offset, supportsAnalyticsFilter: true,
       grupos: rows.map(group => ({
