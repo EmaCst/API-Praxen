@@ -63,13 +63,10 @@ exports.get = async (req, res) => {
   try {
     const association = await db.associations.findByPk(id);
     if (!association) return res.status(404).json({ message: "Asociación no encontrada." });
-    if (req.auth.role !== ROLES.SUPERADMIN) {
-      const scope = await resolveAssociationIds(req);
-      if (!scope.includes(id)) {
-        await recordDeniedAssociationAccess(req, id, "association_detail_outside_membership");
-        return res.status(404).json({ message: "Asociación no encontrada." });
-      }
-    }
+    if (association.isActive === false) return res.status(404).json({ message: "Asociación no encontrada." });
+    // Association metadata is directory data; memberships and member details
+    // are intentionally never included in this response.
+
     return res.json({ asociacion: publicAssociation(association) });
   } catch (e) { return sendError(res, e); }
 };
