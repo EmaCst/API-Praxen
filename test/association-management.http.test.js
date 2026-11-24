@@ -117,7 +117,14 @@ require.cache[modelPath] = {
       create: async event => { audit.push({ ...event, createdAt: new Date() }); return event; },
       findAndCountAll: async ({ limit, offset }) => ({ count: audit.length, rows: audit.slice().reverse().slice(offset, offset + limit) }),
     },
-    atletas: { findOne: async () => ({ id: 1, userId: 1 }) },
+    atletas: {
+      findOne: async () => ({ id: 1, userId: 1 }),
+      findAndCountAll: async () => ({
+        count: 1,
+        rows: [{ id: 1, nombre: "Atleta Demo", federacion: "Atletismo", createdAt: new Date(),
+          usuario: { id: 1, username: "atleta", nombre: "Atleta" } }],
+      }),
+    },
   },
 };
 
@@ -277,4 +284,14 @@ test("las operaciones institucionales generan auditoría", () => {
     "association_created", "association_updated", "association_deactivated",
     "association_admin_assigned_initial", "association_admin_revoked", "association_context_selected",
   ]) assert.ok(actions.includes(action), action);
+});
+
+
+test("el directorio permite buscar deportistas por un solo carácter y devuelve su usuario para confirmar el perfil", async () => {
+  const response = await call("/api/admin/directorio/deportistas?search=a&limit=10", 10);
+  assert.equal(response.status, 200);
+  assert.equal(response.data.deportistas.length, 1);
+  assert.equal(response.data.deportistas[0].nombre, "Atleta Demo");
+  assert.equal(response.data.deportistas[0].username, "atleta");
+  assert.equal(response.data.deportistas[0].federacion, "Atletismo");
 });
