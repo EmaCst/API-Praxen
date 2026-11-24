@@ -80,7 +80,7 @@ exports.respond = async (req, res) => {
       if (invitation.status !== "pending") throw fail(409, "Esta invitación ya no está pendiente.");
       if (invitation.expiresAt <= new Date()) {
         await invitation.update({ status: "expired" }, { transaction });
-        throw fail(409, "La invitación ha vencido.");
+        return { expired: true };
       }
       const association = await db.associations.findByPk(invitation.associationId, {
         transaction, lock: transaction.LOCK.UPDATE,
@@ -115,6 +115,7 @@ exports.respond = async (req, res) => {
       return { action, association: { id: association.id, name: association.name } };
     });
 
+    if (result.expired) return res.status(409).json({ message: "La invitación ha vencido." });
     return res.json({
       message: result.action === "accept"
         ? "Te has unido a " + result.association.name + "."
