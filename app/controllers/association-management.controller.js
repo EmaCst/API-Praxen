@@ -281,26 +281,42 @@ exports.directoryAthletes = async (req, res) => {
   const search = req.query.search === undefined ? "" : req.query.search;
   if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100 ||
       !Number.isSafeInteger(offset) || offset < 0 || offset > 1000000 ||
-      typeof search !== "string" || search.length > 120 ||
-      (search.trim() && search.trim().length < 2)) {
+      typeof search !== "string" || search.length > 120) {
     return res.status(400).json({ message: "Filtros o paginación del directorio inválidos." });
   }
   try {
+    const include = [{
+      model: db.usuarios,
+      as: "usuario",
+      attributes: ["id", "nombre", "username"],
+      where: { role: ROLES.ATHLETE, isActive: true },
+      required: true,
+    }];
     const where = {};
     if (search.trim()) {
       const escaped = search.trim().replace(/[\\%_]/g, "\\$&");
-      where.nombre = { [Op.iLike]: "%" + escaped + "%" };
+      const pattern = "%" + escaped + "%";
+      where[Op.or] = [
+        { nombre: { [Op.iLike]: pattern } },
+        { "$usuario.username$": { [Op.iLike]: pattern } },
+        { "$usuario.nombre$": { [Op.iLike]: pattern } },
+      ];
     }
     const result = await db.atletas.findAndCountAll({
       where,
+      include,
       attributes: ["id", "nombre", "federacion", "createdAt"],
       order: [["nombre", "ASC"], ["id", "ASC"]],
       limit, offset,
+      distinct: true,
     });
     return res.json({
       total: result.count, limit, offset,
       deportistas: result.rows.map(item => ({
-        id: item.id, nombre: item.nombre, federacion: item.federacion,
+        id: item.id,
+        nombre: item.nombre,
+        username: item.usuario?.username || null,
+        federacion: item.federacion,
         createdAt: item.createdAt,
       })),
     });
