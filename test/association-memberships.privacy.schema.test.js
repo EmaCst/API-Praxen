@@ -27,7 +27,8 @@ test("el directorio de deportistas devuelve únicamente campos públicos", () =>
   const source = read("app/controllers/association-management.controller.js");
   const directory = source.slice(source.indexOf("exports.directoryAthletes"));
   assert.match(directory, /attributes: \["id", "nombre", "federacion", "createdAt"\]/);
-  assert.doesNotMatch(directory, /sesiones|resultados|reacciones|aciertos|errores|password|username/i);
+  assert.match(directory, /username: item\.usuario\?\.username/);
+  assert.doesNotMatch(directory, /sesiones|resultados|reacciones|aciertos|errores|password/i);
 });
 
 test("salidas y retiros desactivan membresías y registran auditoría", () => {
