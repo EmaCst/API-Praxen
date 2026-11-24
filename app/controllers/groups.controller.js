@@ -37,19 +37,26 @@ async function findAccessibleGroup(req, rawId) {
   const groupId = id(rawId);
   const group = await db.groups.findByPk(groupId);
   if (!group) throw bad("Grupo no encontrado.", 404);
+  const association = await db.associations.findByPk(group.associationId);
+  if (!association || association.slug === "asociacion-inicial") throw bad("Grupo no encontrado.", 404);
   await assertAssociationAccess(req, group.associationId, { hideExistence: true });
   return group;
 }
 async function resolveCreateAssociation(req, rawAssociationId) {
   const ids = await resolveAssociationIds(req, rawAssociationId);
+  let associationId;
   if (ids === null) {
-    if (rawAssociationId !== undefined) return Number(rawAssociationId);
-    const association = await getDefaultAssociation();
-    return association.id;
+    if (rawAssociationId !== undefined) associationId = Number(rawAssociationId);
+    else associationId = (await getDefaultAssociation()).id;
+  } else if (ids.length === 1) associationId = ids[0];
+  else {
+    if (rawAssociationId === undefined) throw bad("Debes indicar associationId cuando tienes acceso a varias asociaciones.");
+    associationId = ids[0];
   }
-  if (ids.length === 1) return ids[0];
-  if (rawAssociationId === undefined) throw bad("Debes indicar associationId cuando tienes acceso a varias asociaciones.");
-  return ids[0];
+  const association = await db.associations.findByPk(associationId);
+  if (!association || association.isActive === false) throw bad("Asociación no encontrada o inactiva.", 404);
+  if (association.slug === "asociacion-inicial") throw bad("La Asociación Pública es un directorio y no admite grupos.", 409);
+  return associationId;
 }
 
 exports.list = async (req, res) => {
@@ -58,19 +65,41 @@ exports.list = async (req, res) => {
     const search = typeof req.query.search === "string" ? req.query.search.trim() : "";
     if (search.length > 120) throw bad("Búsqueda demasiado larga.");
     const associationIds = await resolveAssociationIds(req, req.query.associationId);
+    const visibleAssociationIds = associationIds === null
+      ? (await db.associations.findAll({
+        where: { isActive: true, slug: { [Op.ne]: "asociacion-inicial" } },
+        attributes: ["id"],
+      })).map(item => Number(item.id))
+      : associationIds;
     const whereGroup = {
       ...(search ? { nombre: { [Op.iLike]: "%" + search.replace(/[\\%_]/g, "\\$&") + "%" } } : {}),
-      ...(associationIds ? { associationId: { [Op.in]: associationIds } } : {}),
+      associationId: { [Op.in]: visibleAssociationIds },
     };
     const { count, rows } = await db.groups.findAndCountAll({
       where: whereGroup, order: [["nombre", "ASC"]], limit, offset,
     });
     const groupIds = rows.map(group => group.id);
-    const totals = groupIds.length ? await db.userGroups.findAll({
-      attributes: ["groupId", [fn("COUNT", col("user_id")), "total"]],
-      where: { groupId: { [Op.in]: groupIds } }, group: ["groupId"],
+    const groupMembers = groupIds.length ? await db.userGroups.findAll({
+      attributes: ["groupId", "userId"],
+      where: { groupId: { [Op.in]: groupIds } },
     }) : [];
-    const counts = new Map(totals.map(item => [item.groupId, Number(item.get("total"))]));
+    const memberIds = [...new Set(groupMembers.map(item => Number(item.userId)))];
+    const activeMemberships = memberIds.length ? await db.associationMemberships.findAll({
+      where: {
+        userId: { [Op.in]: memberIds },
+        associationId: { [Op.in]: [...new Set(rows.map(group => Number(group.associationId)))] },
+        isActive: true,
+      },
+      attributes: ["userId", "associationId"],
+    }) : [];
+    const activeKeys = new Set(activeMemberships.map(item => Number(item.userId) + ":" + Number(item.associationId)));
+    const counts = new Map();
+    for (const member of groupMembers) {
+      const group = rows.find(item => Number(item.id) === Number(member.groupId));
+      if (group && activeKeys.has(Number(member.userId) + ":" + Number(group.associationId))) {
+        counts.set(group.id, (counts.get(group.id) || 0) + 1);
+      }
+    }
     return res.json({
       total: count, limit, offset, supportsAnalyticsFilter: true,
       grupos: rows.map(group => ({
@@ -114,11 +143,11 @@ exports.members = async (req, res) => {
       where: { groupId: group.id }, order: [["assignedAt", "ASC"]],
     });
     const memberIds = memberships.map(item => item.userId);
-    const athleteProfiles = memberIds.length ? await db.atletas.findAll({
-      where: { userId: { [Op.in]: memberIds }, associationId: group.associationId },
+    const activeMemberships = memberIds.length ? await db.associationMemberships.findAll({
+      where: { userId: { [Op.in]: memberIds }, associationId: group.associationId, isActive: true },
       attributes: ["userId"],
     }) : [];
-    const validIds = [...new Set(athleteProfiles.map(athlete => athlete.userId))];
+    const validIds = [...new Set(activeMemberships.map(item => item.userId))];
     const users = validIds.length ? await db.usuarios.findAll({
       where: { id: { [Op.in]: validIds }, role: ROLES.ATHLETE },
       attributes: ["id", "nombre", "username"],
@@ -140,10 +169,14 @@ exports.assign = async (req, res) => {
     const userId = id(req.body?.userId);
     const user = await db.usuarios.findByPk(userId);
     if (!user || user.role !== ROLES.ATHLETE) throw bad("Solo se pueden asignar cuentas de deportistas.", 400);
-    const athlete = await db.atletas.findOne({
-      where: { userId, associationId: group.associationId }, attributes: ["id"],
-    });
-    if (!athlete) throw bad("El deportista no pertenece a la asociación de este grupo.", 400);
+    const [athlete, activeMembership] = await Promise.all([
+      db.atletas.findOne({ where: { userId }, attributes: ["id"] }),
+      db.associationMemberships.findOne({
+        where: { userId, associationId: group.associationId, isActive: true },
+        attributes: ["userId"],
+      }),
+    ]);
+    if (!athlete || !activeMembership) throw bad("El deportista no pertenece activamente a la asociación de este grupo.", 400);
     const [membership, created] = await db.userGroups.findOrCreate({
       where: { groupId: group.id, userId }, defaults: { groupId: group.id, userId },
     });

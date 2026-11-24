@@ -15,6 +15,7 @@ const accounts = new Map([
   [10, { id: 10, nombre: "Directora", username: "directora", role: "admin", passwordHash: null }],
   [11, { id: 11, nombre: "Director B", username: "director-b", role: "admin", passwordHash: null }],
   [12, { id: 12, nombre: "Principal", username: "principal", role: "superadmin", passwordHash: null }],
+  [13, { id: 13, nombre: "Admin sin asociación", username: "admin-sin-asociacion", role: "admin", passwordHash: null }],
 ]);
 for (const user of accounts.values()) { user.tokenVersion = 0; user.mustChangePassword = false; }
 const athletes = [
@@ -45,6 +46,10 @@ function record(id, athleteId, startedAt, type, hits, misses) {
 const associationMemberships = [
   { userId: 10, associationId: 1, isActive: true },
   { userId: 11, associationId: 2, isActive: true },
+  { userId: 1, associationId: 1, isActive: true },
+  { userId: 2, associationId: 1, isActive: true },
+  { userId: 3, associationId: 1, isActive: true },
+  { userId: 4, associationId: 2, isActive: true },
 ];
 const accessAudit = [];
 const sessions = [
@@ -67,8 +72,13 @@ function filterSessions(query) {
       const includeWhere = query.include[0].where;
       const athlete = athletes.find(a => a.id === s.athleteId);
       if (includeWhere.federacion && athlete?.federacion !== includeWhere.federacion) return false;
-      const allowedAssociations = includeWhere.associationId?.[Op.in];
-      if (allowedAssociations && !allowedAssociations.includes(athlete?.associationId)) return false;
+      const membershipQuery = includeWhere.userId?.[Op.in];
+      if (typeof membershipQuery === "string") {
+        const ids = membershipQuery.match(/association_id IN \(([^)]+)\)/)?.[1]
+          ?.split(",").map(Number) || [];
+        if (!associationMemberships.some(item => item.userId === athlete?.userId &&
+            item.isActive && ids.includes(item.associationId))) return false;
+      }
     }
     return true;
   }).sort((a, b) => b.startedAt - a.startedAt ||
@@ -81,14 +91,24 @@ require.cache[modelPath] = {
     sequelize: {
       authenticate: async () => {},
       transaction: async (fn) => fn({}),
+      literal: value => value,
     },
     associationMemberships: {
-      findAll: async ({where}) => associationMemberships.filter(m => m.userId === where.userId && m.isActive === where.isActive),
+      findAll: async ({where = {}}) => associationMemberships.filter(m =>
+        (where.userId === undefined || m.userId === where.userId) &&
+        (where.associationId === undefined || (typeof where.associationId === "object"
+          ? where.associationId[Op.in].includes(m.associationId) : m.associationId === where.associationId)) &&
+        (where.isActive === undefined || m.isActive === where.isActive)),
+      findOne: async ({where = {}}) => associationMemberships.find(m =>
+        (where.userId === undefined || m.userId === where.userId) &&
+        (where.associationId === undefined || (typeof where.associationId === "object"
+          ? where.associationId[Op.in].includes(m.associationId) : m.associationId === where.associationId)) &&
+        (where.isActive === undefined || m.isActive === where.isActive)) || null,
       create: async data => { associationMemberships.push(data); return data; },
     },
     associations: {
       findOne: async () => ({ id: 1, slug: "asociacion-inicial", isActive: true }),
-      findAll: async ({where}) => [{id:1},{id:2}].filter(a => where.id[Op.in].includes(a.id) && where.isActive === true),
+      findAll: async ({where}) => [{id:1},{id:2}].filter(a => where.isActive === true && (!where.id || where.id[Op.in].includes(a.id))),
       findByPk: async id => [{id:1,isActive:true},{id:2,isActive:true}].find(a=>a.id===id)||null,
     },
     adminAudit: { create: async data => { accessAudit.push(data); return data; } },
@@ -112,6 +132,11 @@ require.cache[modelPath] = {
         if (typeof where?.federacion === "string") selected = selected.filter(a => a.federacion === where.federacion);
         else if (where?.federacion?.[Op.not] === null) selected = selected.filter(a => a.federacion !== null);
         if (where?.associationId) selected = selected.filter(a => where.associationId[Op.in].includes(a.associationId));
+        if (typeof where?.userId?.[Op.in] === "string") {
+          const ids = where.userId[Op.in].match(/association_id IN \(([^)]+)\)/)?.[1]?.split(",").map(Number) || [];
+          selected = selected.filter(a => associationMemberships.some(m =>
+            m.userId === a.userId && m.isActive && ids.includes(m.associationId)));
+        }
         if (attributes?.some(x => Array.isArray(x))) {
           const groups = [...new Set(selected.map(a => a.federacion))];
           return groups.map(federacion => ({
@@ -124,10 +149,15 @@ require.cache[modelPath] = {
         return selected;
       },
       findAndCountAll: async ({where, limit, offset}) => {
-        const selected = athletes.filter(a =>
+        let selected = athletes.filter(a =>
           (!where.federacion || a.federacion === where.federacion) &&
           (!where.id || a.id === where.id) &&
           (!where.associationId || where.associationId[Op.in].includes(a.associationId)));
+        if (typeof where.userId?.[Op.in] === "string") {
+          const ids = where.userId[Op.in].match(/association_id IN \(([^)]+)\)/)?.[1]?.split(",").map(Number) || [];
+          selected = selected.filter(a => associationMemberships.some(m =>
+            m.userId === a.userId && m.isActive && ids.includes(m.associationId)));
+        }
         return { count: selected.length, rows: selected.slice(offset, offset + limit) };
       },
       create: async body => {
@@ -345,6 +375,37 @@ test("el admin queda aislado a sus asociaciones incluso manipulando filtros e ID
   try {
     assert.equal((await get("/api/admin/resultados/resumen", adminToken(10))).status, 403);
   } finally { membership.isActive = true; }
+});
+
+
+test("un deportista con membresías activas en A y B comparte un único historial", async () => {
+  const membershipB = { userId: 1, associationId: 2, isActive: true };
+  associationMemberships.push(membershipB);
+  try {
+    const adminA = await get("/api/admin/resultados/resumen?athleteId=1", adminToken(10));
+    const adminB = await get("/api/admin/resultados/resumen?athleteId=1", adminToken(11));
+    assert.equal(adminA.status, 200);
+    assert.equal(adminB.status, 200);
+    assert.equal(adminA.data.summary.totalSessions, 2);
+    assert.equal(adminB.data.summary.totalSessions, 2);
+    assert.equal(adminA.data.summary.athleteCount, 1);
+    assert.equal(adminB.data.summary.athleteCount, 1);
+  } finally {
+    const index = associationMemberships.indexOf(membershipB);
+    if (index >= 0) associationMemberships.splice(index, 1);
+  }
+});
+
+
+test("admin sin membresías privadas conserva acceso al directorio, no a estadísticas", async () => {
+  const associations = await get("/api/admin/asociaciones", adminToken(13));
+  assert.equal(associations.status, 200);
+  assert.equal(associations.data.asociaciones.length, 2);
+  const directory = await get("/api/admin/directorio/deportistas", adminToken(13));
+  assert.equal(directory.status, 200);
+  assert.ok(directory.data.total >= 1);
+  const privateStats = await get("/api/admin/resultados/resumen", adminToken(13));
+  assert.equal(privateStats.status, 403);
 });
 
 test("login distingue público app frente a panel administrativo", async () => {

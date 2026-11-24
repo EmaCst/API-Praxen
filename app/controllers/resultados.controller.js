@@ -148,12 +148,18 @@ admin.athletes = async (req, res) => {
     const filters = parseFilters(req.query, { admin: true, list: true });
     const whereFilter = {};
     const associationIds = await resolveAssociationIds(req, filters.associationId);
-    if (associationIds) whereFilter.associationId = { [Op.in]: associationIds };
+    if (Array.isArray(associationIds)) whereFilter.userId = { [Op.in]: db.sequelize.literal(
+      "(SELECT user_id FROM association_memberships WHERE association_id IN (" +
+      associationIds.map(Number).join(",") + ") AND is_active = TRUE)"
+    ) };
     if (filters.federation) whereFilter.federacion = filters.federation;
     if (filters.athleteId && Array.isArray(associationIds) && typeof db.atletas.findByPk === "function") {
-      const target = await db.atletas.findByPk(filters.athleteId, { attributes: ["id", "associationId"] });
-      if (target && !associationIds.includes(Number(target.associationId))) {
-        await recordDeniedAssociationAccess(req, target.associationId, "athlete_directory_outside_membership");
+      const target = await db.atletas.findByPk(filters.athleteId, { attributes: ["id", "userId"] });
+      const membership = target?.userId ? await db.associationMemberships.findOne({
+        where: { userId: target.userId, associationId: { [Op.in]: associationIds }, isActive: true },
+      }) : null;
+      if (!membership) {
+        await recordDeniedAssociationAccess(req, associationIds[0], "athlete_directory_outside_active_membership");
         throw new ResultsError(404, "Atleta no encontrado.");
       }
     }
@@ -164,8 +170,13 @@ admin.athletes = async (req, res) => {
         await recordDeniedAssociationAccess(req, group.associationId, "athlete_list_group_outside_membership");
         throw new ResultsError(404, "Grupo no encontrado.");
       }
-      whereFilter.associationId = group.associationId;
-      whereFilter.userId = { [Op.in]: db.sequelize.literal("(SELECT user_id FROM user_groups WHERE group_id = "+Number(filters.groupId)+")") };
+      whereFilter.userId = { [Op.in]: db.sequelize.literal(
+        "(SELECT ug.user_id FROM user_groups ug INNER JOIN association_memberships am ON am.user_id = ug.user_id " +
+        "WHERE ug.group_id = " + Number(filters.groupId) +
+        " AND am.association_id = " + Number(group.associationId) +
+        (Array.isArray(associationIds) ? " AND am.association_id IN (" + associationIds.map(Number).join(",") + ")" : "") +
+        " AND am.is_active = TRUE)"
+      ) };
     }
     if (filters.athleteId) whereFilter.id = filters.athleteId;
     if (req.query.search !== undefined) {
@@ -202,7 +213,12 @@ admin.federations = async (req, res) => {
         "federacion",
         [fn("COUNT", col("id")), "totalAtletas"],
       ],
-      where: { federacion: { [Op.not]: null }, ...(associationIds ? { associationId: { [Op.in]: associationIds } } : {}) },
+      where: { federacion: { [Op.not]: null }, ...(Array.isArray(associationIds) ? {
+        userId: { [Op.in]: db.sequelize.literal(
+          "(SELECT user_id FROM association_memberships WHERE association_id IN (" +
+          associationIds.map(Number).join(",") + ") AND is_active = TRUE)"
+        ) },
+      } : {}) },
       group: ["federacion"],
       order: [["federacion", "ASC"]],
     });
@@ -226,7 +242,12 @@ admin.federationSummary = async (req, res) => {
     const sessions = await loadSessions(makeQuery(filters, { type: "global", associationIds }));
     const athleteRows = await db.atletas.findAll({
       attributes: ["id", "federacion"],
-      ...(associationIds ? { where: { associationId: { [Op.in]: associationIds } } } : {}),
+      ...(Array.isArray(associationIds) ? { where: {
+        userId: { [Op.in]: db.sequelize.literal(
+          "(SELECT user_id FROM association_memberships WHERE association_id IN (" +
+          associationIds.map(Number).join(",") + ") AND is_active = TRUE)"
+        ) },
+      } } : {}),
     });
     const federationById = new Map(athleteRows.map(row => [Number(row.id), row.federacion]));
     const buckets = new Map();

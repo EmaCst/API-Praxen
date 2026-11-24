@@ -157,8 +157,9 @@ test("admin puede consultar sus asociaciones y seleccionar contexto sin confiar 
   const selected = await call("/api/admin/contexto-asociacion", 10, "PUT", { associationId: 2 });
   assert.equal(selected.status, 200);
   assert.equal(users.get(10).activeAssociationId, 2);
-  const outside = await call("/api/admin/asociaciones/3", 10);
-  assert.equal(outside.status, 404);
+  const publicDirectoryEntry = await call("/api/admin/asociaciones/3", 10);
+  assert.equal(publicDirectoryEntry.status, 200);
+  assert.equal(publicDirectoryEntry.data.asociacion.id, 3);
 
   const updatedContext = await call("/api/admin/contexto-asociacion", 10);
   assert.equal(updatedContext.data.activeAssociationId, 2);
@@ -205,6 +206,8 @@ test("superadmin puede asignar y revocar membresía de admin sin borrar la cuent
   assert.equal(listed.status, 200);
   assert.equal(listed.data.administradores[0].id, 20);
 
+  memberships.push({ userId: 10, associationId: 3, isActive: true,
+    update: async function(v) { Object.assign(this, v); return this; } });
   const revoked = await call("/api/admin/asociaciones/3/administradores/20", 12, "DELETE");
   assert.equal(revoked.status, 200);
   assert.equal(users.has(20), true);

@@ -82,6 +82,7 @@ exports.create = async (req, res) => {
         transaction, lock: transaction.LOCK.UPDATE,
       });
       if (!association || association.isActive === false) throw fail(404, "Asociación no encontrada o inactiva.");
+      if (association.slug === "asociacion-inicial") throw fail(409, "La Asociación Pública es un directorio y no admite administradores por membresía.");
       const target = await db.usuarios.findByPk(targetUserId, { transaction, lock: transaction.LOCK.UPDATE });
       if (!target || target.role !== ROLES.ADMIN || target.isActive === false) {
         throw fail(404, "No se encontró una cuenta activa con rol Administrador.");
@@ -121,6 +122,7 @@ exports.list = async (req, res) => {
   try {
     const association = await db.associations.findByPk(associationId);
     if (!association || association.isActive === false) throw fail(404, "Asociación no encontrada o inactiva.");
+    if (association.slug === "asociacion-inicial") throw fail(409, "La Asociación Pública no administra solicitudes ni auditorías de membresía.");
     await assertAssociationAccess(req, associationId);
     if (req.auth.role === ROLES.ADMIN) {
       await assertReviewer(req, associationId);
@@ -161,6 +163,7 @@ exports.decide = async (req, res) => {
         transaction, lock: transaction.LOCK.UPDATE,
       });
       if (!association || association.isActive === false) throw fail(404, "Asociación no encontrada o inactiva.");
+      if (association.slug === "asociacion-inicial") throw fail(409, "La Asociación Pública no admite solicitudes administrativas.");
       await assertReviewer(req, associationId, transaction);
       const current = await db.associationAdminRequests.findOne({
         where: { id: requestId, associationId }, transaction, lock: transaction.LOCK.UPDATE,
@@ -217,6 +220,7 @@ exports.audit = async (req, res) => {
   try {
     const association = await db.associations.findByPk(associationId);
     if (!association || association.isActive === false) throw fail(404, "Asociación no encontrada o inactiva.");
+    if (association.slug === "asociacion-inicial") throw fail(409, "La Asociación Pública no administra solicitudes ni auditorías de membresía.");
     await assertAssociationAccess(req, associationId);
     if (req.auth.role === ROLES.ADMIN) {
       await assertReviewer(req, associationId);

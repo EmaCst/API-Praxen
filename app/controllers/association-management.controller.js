@@ -22,6 +22,7 @@ const publicAdmin = user => ({
   createdAt: user.createdAt,
 });
 const error = (status, message) => Object.assign(new Error(message), { status });
+const isPublicDirectory = association => association?.slug === "asociacion-inicial";
 const parseId = value => {
   const id = Number(value);
   return Number.isSafeInteger(id) && id > 0 ? id : null;
@@ -42,9 +43,9 @@ function sendError(res, e) {
 
 exports.list = async (req, res) => {
   try {
-    const where = req.auth.role === ROLES.SUPERADMIN
-      ? {}
-      : { id: { [Op.in]: req.auth.associationIds || [] }, isActive: true };
+    // Association discovery is a public directory for authenticated admins.
+    // It intentionally exposes association metadata only, never memberships.
+    const where = { isActive: true };
     const rows = await db.associations.findAll({ where, order: [["name", "ASC"], ["id", "ASC"]] });
     return res.json({
       total: rows.length,
@@ -63,13 +64,10 @@ exports.get = async (req, res) => {
   try {
     const association = await db.associations.findByPk(id);
     if (!association) return res.status(404).json({ message: "Asociación no encontrada." });
-    if (req.auth.role !== ROLES.SUPERADMIN) {
-      const scope = await resolveAssociationIds(req);
-      if (!scope.includes(id)) {
-        await recordDeniedAssociationAccess(req, id, "association_detail_outside_membership");
-        return res.status(404).json({ message: "Asociación no encontrada." });
-      }
-    }
+    if (association.isActive === false) return res.status(404).json({ message: "Asociación no encontrada." });
+    // Association metadata is directory data; memberships and member details
+    // are intentionally never included in this response.
+
     return res.json({ asociacion: publicAssociation(association) });
   } catch (e) { return sendError(res, e); }
 };
@@ -108,6 +106,7 @@ exports.update = async (req, res) => {
     const association = await db.sequelize.transaction(async transaction => {
       const target = await db.associations.findByPk(id, { transaction, lock: transaction.LOCK.UPDATE });
       if (!target) throw error(404, "Asociación no encontrada.");
+      if (isPublicDirectory(target) && body.slug !== undefined && body.slug !== target.slug) throw error(409, "No se puede cambiar el identificador interno de la Asociación Pública.");
       const before = { name: target.name, slug: target.slug };
       const changes = {};
       if (body.name !== undefined) changes.name = body.name.trim();
@@ -132,6 +131,7 @@ exports.setActive = async (req, res) => {
     const association = await db.sequelize.transaction(async transaction => {
       const target = await db.associations.findByPk(id, { transaction, lock: transaction.LOCK.UPDATE });
       if (!target) throw error(404, "Asociación no encontrada.");
+      if (isPublicDirectory(target) && req.body.isActive === false) throw error(409, "La Asociación Pública no se puede desactivar.");
       if (target.isActive === req.body.isActive) return target;
       if (!req.body.isActive) {
         const activeCount = await db.associations.count({ where: { isActive: true }, transaction });
@@ -156,6 +156,7 @@ exports.listAdmins = async (req, res) => {
   try {
     const association = await db.associations.findByPk(associationId);
     if (!association) return res.status(404).json({ message: "Asociación no encontrada." });
+    if (isPublicDirectory(association)) return res.status(409).json({ message: "La Asociación Pública no administra miembros ni administradores." });
     const memberships = await db.associationMemberships.findAll({
       where: { associationId },
       order: [["createdAt", "ASC"]],
@@ -179,6 +180,7 @@ exports.assignAdmin = async (req, res) => {
     const result = await db.sequelize.transaction(async transaction => {
       const association = await db.associations.findByPk(associationId, { transaction, lock: transaction.LOCK.UPDATE });
       if (!association || association.isActive === false) throw error(404, "Asociación no encontrada o inactiva.");
+      if (association.slug === "asociacion-inicial") throw error(409, "La Asociación Pública es un directorio y no admite administradores por membresía.");
       const user = await db.usuarios.findByPk(userId, { transaction, lock: transaction.LOCK.UPDATE });
       if (!user || user.role !== ROLES.ADMIN || user.isActive === false) {
         throw error(404, "Administrador activo no encontrado.");
@@ -233,12 +235,21 @@ exports.revokeAdmin = async (req, res) => {
         transaction, lock: transaction.LOCK.UPDATE,
       });
       if (!association) throw error(404, "Asociación no encontrada.");
+      if (isPublicDirectory(association)) throw error(409, "La Asociación Pública no administra administradores.");
       const membership = await db.associationMemberships.findOne({
         where: { userId, associationId, isActive: true }, transaction, lock: transaction.LOCK.UPDATE,
       });
       if (!membership) throw error(404, "Membresía de administrador no encontrada.");
       const user = await db.usuarios.findByPk(userId, { transaction, lock: transaction.LOCK.UPDATE });
       if (!user || user.role !== ROLES.ADMIN) throw error(404, "Administrador no encontrado.");
+      const activeRows = await db.associationMemberships.findAll({
+        where: { associationId, isActive: true }, attributes: ["userId"], transaction,
+      });
+      const activeIds = [...new Set(activeRows.map(item => Number(item.userId)))];
+      const activeAdmins = activeIds.length ? await db.usuarios.count({
+        where: { id: { [Op.in]: activeIds }, role: ROLES.ADMIN, isActive: true }, transaction,
+      }) : 0;
+      if (activeAdmins <= 1) throw error(409, "No se puede retirar al último administrador activo de la asociación.");
       await membership.update({ isActive: false }, { transaction });
       const remaining = await db.associationMemberships.findAll({
         where: { userId, isActive: true }, attributes: ["associationId"], transaction,
@@ -259,6 +270,39 @@ exports.revokeAdmin = async (req, res) => {
       message: "Membresía revocada. La cuenta del administrador se conserva.",
       userId,
       remainingAssociationIds: result.remainingAssociationIds,
+    });
+  } catch (e) { return sendError(res, e); }
+};
+
+ 
+exports.directoryAthletes = async (req, res) => {
+  const limit = req.query.limit === undefined ? 25 : Number(req.query.limit);
+  const offset = req.query.offset === undefined ? 0 : Number(req.query.offset);
+  const search = req.query.search === undefined ? "" : req.query.search;
+  if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100 ||
+      !Number.isSafeInteger(offset) || offset < 0 || offset > 1000000 ||
+      typeof search !== "string" || search.length > 120 ||
+      (search.trim() && search.trim().length < 2)) {
+    return res.status(400).json({ message: "Filtros o paginación del directorio inválidos." });
+  }
+  try {
+    const where = {};
+    if (search.trim()) {
+      const escaped = search.trim().replace(/[\\%_]/g, "\\$&");
+      where.nombre = { [Op.iLike]: "%" + escaped + "%" };
+    }
+    const result = await db.atletas.findAndCountAll({
+      where,
+      attributes: ["id", "nombre", "federacion", "createdAt"],
+      order: [["nombre", "ASC"], ["id", "ASC"]],
+      limit, offset,
+    });
+    return res.json({
+      total: result.count, limit, offset,
+      deportistas: result.rows.map(item => ({
+        id: item.id, nombre: item.nombre, federacion: item.federacion,
+        createdAt: item.createdAt,
+      })),
     });
   } catch (e) { return sendError(res, e); }
 };
