@@ -46,7 +46,7 @@ exports.list=async(req,res)=>{
   if(association.slug==="asociacion-inicial")throw fail(409,"La Asociación Pública no gestiona invitaciones.");
   await assertAssociationAccess(req,associationId);
   const status=req.query.status;
-  if(status!==undefined&&!["pending","accepted","revoked","expired"].includes(status))throw fail(400,"El estado solicitado no es válido.");
+  if(status!==undefined&&!["pending","accepted","declined","revoked","expired"].includes(status))throw fail(400,"El estado solicitado no es válido.");
   const limit=req.query.limit===undefined?25:Number(req.query.limit),offset=req.query.offset===undefined?0:Number(req.query.offset);
   if(!Number.isSafeInteger(limit)||limit<1||limit>100||!Number.isSafeInteger(offset)||offset<0||offset>1000000)throw fail(400,"Paginación inválida.");
   const now=new Date();
