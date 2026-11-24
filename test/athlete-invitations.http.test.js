@@ -11,7 +11,7 @@ let audit;
 
 function reset() {
   invitation = {
-    id: 12, associationId: 3, invitedUsername: "deportista",
+    id: 12, associationId: 3, invitedUsername: "deportista", invitedUserId: 7,
     createdByUserId: 20, status: "pending",
     expiresAt: new Date(Date.now() + 60_000),
     update: async function(values) { Object.assign(this, values); return this; },
@@ -27,7 +27,11 @@ require.cache[modelPath] = {
   exports: {
     sequelize: { transaction: async callback => callback({ LOCK: { UPDATE: "UPDATE" } }) },
     usuarios: { findByPk: async id => Number(id) === user.id ? user : Number(id) === 99 ? { id: 99, username: "otro", isActive: true } : null },
-    associationInvitations: { findByPk: async id => Number(id) === invitation.id ? invitation : null },
+    associationInvitations: {
+      findByPk: async id => Number(id) === invitation.id ? invitation : null,
+      update: async () => [0],
+      findAll: async () => [invitation],
+    },
     associations: { findByPk: async id => Number(id) === association.id ? association : null },
     associationMemberships: {
       findOne: async () => membership,
@@ -48,7 +52,16 @@ function response() {
 
 test.beforeEach(reset);
 
-test("aceptar una invitación crea la membresía y deja auditoría", async () => {
+test("el deportista recupera las invitaciones por ID de usuario", async () => {
+  const res = response();
+  await controller.listMine({ auth: { userId: 7, role: "athlete" } }, res);
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body.invitaciones.length, 1);
+  assert.equal(res.body.invitaciones[0].id, 12);
+  assert.equal(res.body.invitaciones[0].association.id, 3);
+});
+
+test("aceptar una invitación vinculada por ID crea la membresía y deja auditoría", async () => {
   const res = response();
   await controller.respond({ auth: { userId: 7, role: "athlete" }, params: { invitationId: "12" }, body: { action: "accept" } }, res);
   assert.equal(res.statusCode, 200);
