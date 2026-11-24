@@ -28,10 +28,10 @@ exports.create=async(req,res)=>{
    if(!target||target.role!==ROLES.ATHLETE||target.isActive===false)throw fail(404,"No existe una cuenta activa de deportista con ese usuario.");
    const existing=await db.associationMemberships.findOne({where:{userId:target.id,associationId,isActive:true},transaction});
    if(existing)throw fail(409,"El usuario ya pertenece a esta asociación.");
-   const pending=await db.associationInvitations.findOne({where:{associationId,invitedUsername,status:"pending",expiresAt:{[Op.gt]:new Date()}},transaction});
+   const pending=await db.associationInvitations.findOne({where:{associationId,status:"pending",expiresAt:{[Op.gt]:new Date()},[Op.or]:[{invitedUserId:target.id},{invitedUserId:null,invitedUsername}]},transaction});
    if(pending)throw fail(409,"Ya existe una invitación pendiente para este usuario.");
    const token=crypto.randomBytes(32).toString("hex"),tokenHash=crypto.createHash("sha256").update(token).digest("hex");
-   const invitation=await db.associationInvitations.create({associationId,invitedUsername,tokenHash,status:"pending",createdByUserId:req.auth.userId,expiresAt:new Date(Date.now()+7*24*60*60*1000)},{transaction});
+   const invitation=await db.associationInvitations.create({associationId,invitedUsername,invitedUserId:target.id,tokenHash,status:"pending",createdByUserId:req.auth.userId,expiresAt:new Date(Date.now()+7*24*60*60*1000)},{transaction});
    return {token,invitation,association};
   });
   return res.status(201).json({invitacion:{id:result.invitation.id,username:result.invitation.invitedUsername,association:result.association.name,expiresAt:result.invitation.expiresAt,status:result.invitation.status},token:result.token});
