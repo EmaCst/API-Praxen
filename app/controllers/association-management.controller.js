@@ -309,6 +309,7 @@ exports.directoryAthletes = async (req, res) => {
       order: [["nombre", "ASC"], ["id", "ASC"]],
       limit, offset,
       distinct: true,
+      subQuery: false,
     });
     return res.json({
       total: result.count, limit, offset,
