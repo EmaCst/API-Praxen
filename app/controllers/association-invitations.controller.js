@@ -34,7 +34,7 @@ exports.create=async(req,res)=>{
    const invitation=await db.associationInvitations.create({associationId,invitedUsername,invitedUserId:target.id,tokenHash,status:"pending",createdByUserId:req.auth.userId,expiresAt:new Date(Date.now()+7*24*60*60*1000)},{transaction});
    return {token,invitation,association};
   });
-  return res.status(201).json({invitacion:{id:result.invitation.id,username:result.invitation.invitedUsername,association:result.association.name,expiresAt:result.invitation.expiresAt,status:result.invitation.status},token:result.token});
+  return res.status(201).json({invitacion:{id:result.invitation.id,username:result.invitation.invitedUsername,association:result.association.name,expiresAt:result.invitation.expiresAt,status:result.invitation.status}});
  }catch(error){return sendError(res,error,"Error al crear invitación de asociación:");}
 };
 exports.list=async(req,res)=>{
