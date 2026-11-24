@@ -44,10 +44,10 @@ exports.listMine = async (req, res) => {
     const now = new Date();
     await db.associationInvitations.update(
       { status: "expired" },
-      { where: { invitedUsername: normalizeUsername(user.username), status: "pending", expiresAt: { [Op.lte]: now } } }
+      { where: { [Op.or]: [{ invitedUserId: user.id }, { invitedUserId: null, invitedUsername: normalizeUsername(user.username) }], status: "pending", expiresAt: { [Op.lte]: now } } }
     );
     const rows = await db.associationInvitations.findAll({
-      where: { invitedUsername: normalizeUsername(user.username), status: "pending", expiresAt: { [Op.gt]: now } },
+      where: { [Op.or]: [{ invitedUserId: user.id }, { invitedUserId: null, invitedUsername: normalizeUsername(user.username) }], status: "pending", expiresAt: { [Op.gt]: now } },
       order: [["createdAt", "DESC"], ["id", "DESC"]],
       attributes: ["id", "associationId", "createdByUserId", "status", "expiresAt", "createdAt"],
     });
@@ -74,7 +74,9 @@ exports.respond = async (req, res) => {
       const invitation = await db.associationInvitations.findByPk(invitationId, {
         transaction, lock: transaction.LOCK.UPDATE,
       });
-      if (!invitation || normalizeUsername(invitation.invitedUsername) !== normalizeUsername(user.username)) {
+      if (!invitation || (invitation.invitedUserId != null
+        ? Number(invitation.invitedUserId) !== Number(user.id)
+        : normalizeUsername(invitation.invitedUsername) !== normalizeUsername(user.username))) {
         throw fail(404, "No encontramos una invitación pendiente para tu cuenta.");
       }
       if (invitation.status !== "pending") throw fail(409, "Esta invitación ya no está pendiente.");
