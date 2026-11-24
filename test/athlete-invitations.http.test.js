@@ -26,7 +26,7 @@ require.cache[modelPath] = {
   id: modelPath, filename: modelPath, loaded: true,
   exports: {
     sequelize: { transaction: async callback => callback({ LOCK: { UPDATE: "UPDATE" } }) },
-    usuarios: { findByPk: async id => Number(id) === user.id ? user : null },
+    usuarios: { findByPk: async id => Number(id) === user.id ? user : Number(id) === 99 ? { id: 99, username: "otro", isActive: true } : null },
     associationInvitations: { findByPk: async id => Number(id) === invitation.id ? invitation : null },
     associations: { findByPk: async id => Number(id) === association.id ? association : null },
     associationMemberships: {
