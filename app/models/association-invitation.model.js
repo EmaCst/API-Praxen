@@ -3,6 +3,7 @@ module.exports=(sequelize,DataTypes)=>sequelize.define("associationInvitation",{
  id:{type:DataTypes.INTEGER,autoIncrement:true,primaryKey:true},
  associationId:{type:DataTypes.INTEGER,allowNull:false,field:"association_id",references:{model:"associations",key:"id"},onUpdate:"CASCADE",onDelete:"CASCADE"},
  invitedUsername:{type:DataTypes.STRING(32),allowNull:false,field:"invited_username"},
+ invitedUserId:{type:DataTypes.INTEGER,allowNull:true,field:"invited_user_id",references:{model:"users",key:"id"},onUpdate:"CASCADE",onDelete:"SET NULL"},
  tokenHash:{type:DataTypes.STRING(64),allowNull:false,unique:true,field:"token_hash"},
  status:{type:DataTypes.STRING(16),allowNull:false,defaultValue:"pending",validate:{isIn:[["pending","accepted","declined","revoked","expired"]]}},
  createdByUserId:{type:DataTypes.INTEGER,allowNull:false,field:"created_by_user_id",references:{model:"users",key:"id"},onUpdate:"CASCADE",onDelete:"RESTRICT"},
