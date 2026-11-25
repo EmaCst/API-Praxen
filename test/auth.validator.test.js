@@ -26,7 +26,7 @@ test("valida inicio de sesión y contraseña nueva", () => {
   assert.equal(validateNewPassword("short"), false);
 });
 
-test("federación automática y límite de bytes UTF-8 de bcrypt", () => {
+test("el registro no exige federación y respeta el límite de bytes UTF-8 de bcrypt", () => {
   const account = { nombre: "Ana", username: "ana_123", password: "abcdefgh" };
   assert.equal(validateRegistration(account).valid, true);
   assert.equal(validateRegistration({ ...account, federacion: "Atletismo" }).valid, true);
