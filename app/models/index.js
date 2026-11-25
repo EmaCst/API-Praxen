@@ -23,6 +23,7 @@ db.associationMemberships = require("./association-membership.model.js")(sequeli
 db.associationInvitations = require("./association-invitation.model.js")(sequelize, Sequelize.DataTypes);
 db.associationAdminRequests = require("./association-admin-request.model.js")(sequelize, Sequelize.DataTypes);
 db.atletas = require("./atleta.model.js")(sequelize, Sequelize.DataTypes);
+db.swimmingRecords = require("./swimming-record.model.js")(sequelize, Sequelize.DataTypes);
 db.sesiones = require("./sesion.model.js")(sequelize, Sequelize.DataTypes);
 db.adminAudit = require("./admin-audit.model.js")(sequelize, Sequelize.DataTypes);
 db.groups = require("./group.model.js")(sequelize, Sequelize.DataTypes);
@@ -92,6 +93,13 @@ db.groups.belongsTo(db.associations, {
   foreignKey: "associationId",
   as: "asociacion",
 });
+
+db.atletas.hasMany(db.swimmingRecords, { foreignKey: "athleteId", as: "marcasNatacion" });
+db.swimmingRecords.belongsTo(db.atletas, { foreignKey: "athleteId", as: "atleta" });
+db.associations.hasMany(db.swimmingRecords, { foreignKey: "associationId", as: "marcasNatacion" });
+db.swimmingRecords.belongsTo(db.associations, { foreignKey: "associationId", as: "asociacion" });
+db.usuarios.hasMany(db.swimmingRecords, { foreignKey: "authorUserId", as: "marcasRegistradas" });
+db.swimmingRecords.belongsTo(db.usuarios, { foreignKey: "authorUserId", as: "autor" });
 
 db.atletas.hasMany(db.sesiones, {
   foreignKey: "athleteId",
