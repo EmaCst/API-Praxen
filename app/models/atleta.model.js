@@ -11,6 +11,9 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.STRING(120),
         allowNull: false,
       },
+      birthDate: { type: DataTypes.DATEONLY, allowNull: true, field: "birth_date" },
+      category: { type: DataTypes.STRING(80), allowNull: true },
+      specialty: { type: DataTypes.STRING(120), allowNull: true },
       federacion: {
         type: DataTypes.STRING(120),
         allowNull: true,
