@@ -64,7 +64,9 @@ exports.register = async (req, res) => {
       // membership is granted only after an administrator invitation is accepted.
       const athlete = await db.atletas.create({
         nombre: req.body.nombre.trim(),
-        federacion: "Natación",
+        // Sport/federation is intentionally left unset during public registration.
+        // It can be completed later from the athlete profile in Praxen Analytics.
+        federacion: null,
         userId: user.id,
         associationId: null,
       }, { transaction });
